@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.10)
+project(LodeRouter CXX)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(OpenSSL REQUIRED)
+
+add_executable(LodeRouter src/main.cpp src/choose_model.cpp)
+add_executable(config_tool src/edit_config.cpp include/passwordPrompt_cpp/passwordPrompt.cpp)
+target_include_directories(LodeRouter PRIVATE include)
+target_compile_definitions(LodeRouter PRIVATE CPPHTTPLIB_OPENSSL_SUPPORT)
+target_link_libraries(LodeRouter PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+target_compile_options(LodeRouter PRIVATE -pthread)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
