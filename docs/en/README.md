@@ -1,7 +1,7 @@
 [English](./README.md) | [简体中文](../zh-CN/README.md)
 # LodeRouter
 
-Automatically routes models based on question difficulty, ensuring answer quality while reducing inference costs.
+Automatically routes models based on question difficulty.
 
 ## Core Features
 
