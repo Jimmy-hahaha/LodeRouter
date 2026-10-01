@@ -8,4 +8,5 @@ my_scripts/
 .scratch/
 .cache/
 .reasonix/
-config/
+config/*
+!config/config.json

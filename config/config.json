@@ -1,0 +1,19 @@
+{
+    "host": "127.0.0.1",
+    "port": 8080,
+    "backend_url": "",
+    "judge_backend": "laya",
+    "judge_url": "",
+    "judge_model_dir": "",
+    "judge_auto_download": true,
+    "api_key": "",
+    "judge_api_key": "",
+    "model_easy": "",
+    "model_middle": "",
+    "model_hard": "",
+    "backends": {
+        "easy":   { "url": "", "model": "", "api_key": "" },
+        "middle": { "url": "", "model": "", "api_key": "" },
+        "hard":   { "url": "", "model": "", "api_key": "" }
+    }
+}
