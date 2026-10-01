@@ -60,7 +60,7 @@ curl -L -C - -o model.onnx "$BASE/model_int8.onnx"    # 873 MB；-C - 断了可�
 然后在 `config.json` 里指过去（也可以用环境变量 `LODE_JUDGE_MODEL_DIR`）：
 
 ```json
-"judge_model_dir": "/home/you/laya-onnx"
+{ "judge_model_dir": "/home/you/laya-onnx" }
 ```
 
 **③ 换成自己的模型**：任何 laya 格式的 ONNX 目录都能用（需含 `model.onnx` + `tokenizer.json`，且 tokenizer 里有 `<bos>` / `<eos>` / `<mask>`）。例如用官方 `edgejev` 从任意 checkpoint 自己导出：
@@ -80,7 +80,7 @@ edgejev build --backend laya --model convaiinnovations/laya-multilingual --out .
 | **macOS** | `~/Library/Application Support/LodeRouter` |
 | **Windows** | `%APPDATA%\LodeRouter` (即 `C:\Users\用户名\AppData\Roaming\LodeRouter`) |
 
-目录下创建 `config.json` 文件，内容如下：
+目录下创建 `config.json` 文件。全部可用字段如下（都可以留空，用不到的整块删掉也行）：
 
 ```json
 {
@@ -114,28 +114,23 @@ edgejev build --backend laya --model convaiinnovations/laya-multilingual --out .
 - `judge_api_key`：调用难度判断服务所需的 API Key（仅 `http` 后端使用）
 - `api_key`：调用后端模型服务所需的 API Key（三个挡位的默认密钥）
 - `model_easy` / `model_middle` / `model_hard`：分别对应三种难度使用的模型名称（三个挡位的默认模型）
-- `backends.easy` / `backends.middle` / `backends.hard`：**按挡位覆盖**上面三个默认值，每项含 `url` / `model` / `api_key`。留空或整块不写就沿用默认值，因此只有一个后端时完全不用配它
+- `backends.easy` / `backends.middle` / `backends.hard`：**按挡位指定各自的服务**，每项含 `url` / `model` / `api_key`。每一项都可以省，省掉的字段继承 `backend_url` / `model_<level>` / `api_key`
 
-三个挡位可以指向**不同的服务**：例如 `easy` 走本地 llama.cpp 小模型、`hard` 走云端 API（`url` 写 `https://...` 即可，走 HTTPS）：
+**写法建议**：只有一个后端时，只填 `backend_url` + `model_easy` / `model_middle` / `model_hard`（`api_key` 按需），不用写 `backends`；三个挡位指向不同服务时，**建议三档都写进 `backends.*`**，每档都写全 `url` / `model` / `api_key`，格式统一、一眼能看出哪档走到哪里：
 
 ```json
 {
-  "backend_url": "http://127.0.0.1:8088",
-  "api_key": "",
-  "model_easy": "Qwen3.5-0.8B",
-  "model_middle": "MiniCPM5-1B",
-  "model_hard": "Maple-Preview",
   "backends": {
-    "hard": {
-      "url": "https://api.deepseek.com",
-      "model": "deepseek-reasoner",
-      "api_key": "sk-xxxxxxxx"
-    }
+    "easy":   { "url": "http://127.0.0.1:8088",    "model": "Qwen3.5-0.8B",      "api_key": "" },
+    "middle": { "url": "http://127.0.0.1:8088",    "model": "MiniCPM5-1B",       "api_key": "" },
+    "hard":   { "url": "https://api.deepseek.com", "model": "deepseek-reasoner", "api_key": "sk-xxxxxxxx" }
   }
 }
 ```
 
-上例里 `easy` / `middle` 沿用本地服务，只有 `hard` 换了云端地址、模型和 key。
+上例里 `easy` / `middle` 走本地 llama.cpp（不需要 key），`hard` 走云端 DeepSeek（`url` 写 `https://...` 就是 HTTPS）。也可以只写有差异的那一档（比如只写 `backends.hard`），其余挡位会继承上面的默认值——只是那样 `easy` / `middle` / `hard` 的配置分散在两处，不推荐。
+
+同一档位的模型名**以 `backends.<level>.model` 为准**：它非空时会覆盖 `model_<level>`，两个都写时后者不生效。
 
 `laya` 后端使用其 `score` 头把用户输入分成三档难度（闲聊/大多数日常问题/极复杂推理与高难度编程），再把结果映射到对应挡位；判定失败时回退到 `easy` 挡位。裁判的输入不是最后一句话，而是整段对话压缩出的结构化概要（见下）。
 

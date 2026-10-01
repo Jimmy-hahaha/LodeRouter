@@ -60,7 +60,7 @@ curl -L -C - -o model.onnx "$BASE/model_int8.onnx"    # 873 MB; -C - resumes an 
 Then point the config at it (the `LODE_JUDGE_MODEL_DIR` environment variable works too):
 
 ```json
-"judge_model_dir": "/home/you/laya-onnx"
+{ "judge_model_dir": "/home/you/laya-onnx" }
 ```
 
 **3) Bring your own model**: any laya-format ONNX directory works (`model.onnx` + `tokenizer.json`, with `<bos>` / `<eos>` / `<mask>` in the tokenizer). For instance, export your own from any checkpoint with the upstream `edgejev` tool:
@@ -80,7 +80,7 @@ Use the compiled `config_tool` (interactive: it asks for `host` / `port` / `back
 | **macOS** | `~/Library/Application Support/LodeRouter` |
 | **Windows** | `%APPDATA%\LodeRouter` (i.e., `C:\Users\Username\AppData\Roaming\LodeRouter`) |
 
-Create a `config.json` file in the directory with the following content:
+Create a `config.json` file in the directory. All available fields are listed below (every one of them may stay empty, and unused blocks can be dropped):
 
 ```json
 {
@@ -114,28 +114,23 @@ Create a `config.json` file in the directory with the following content:
 - `judge_api_key`: The API Key required to call the difficulty judgment service (only used by the `http` backend)
 - `api_key`: The API Key required to call the backend model service (the default key for all three levels)
 - `model_easy` / `model_middle` / `model_hard`: The model names corresponding to the three difficulty levels (the default models)
-- `backends.easy` / `backends.middle` / `backends.hard`: **per-level overrides** of the defaults above, each with `url` / `model` / `api_key`. Leave a field empty (or omit the whole block) to inherit the default, so a single backend needs no `backends` section at all
+- `backends.easy` / `backends.middle` / `backends.hard`: **per-level service definitions**, each with `url` / `model` / `api_key`. Every field can be omitted, in which case it inherits `backend_url` / `model_<level>` / `api_key`
 
-The three levels may point at **different services**: for example `easy` on a small local llama.cpp model and `hard` on a cloud API (put an `https://` URL in `url` — HTTPS is supported):
+**Which style to use**: with a single backend, fill in only `backend_url` + `model_easy` / `model_middle` / `model_hard` (`api_key` as needed) and skip `backends` entirely. When the three levels point at different services, **write all three into `backends.*`**, each with its own `url` / `model` / `api_key` — one uniform shape that shows at a glance where each level goes:
 
 ```json
 {
-  "backend_url": "http://127.0.0.1:8088",
-  "api_key": "",
-  "model_easy": "Qwen3.5-0.8B",
-  "model_middle": "MiniCPM5-1B",
-  "model_hard": "Maple-Preview",
   "backends": {
-    "hard": {
-      "url": "https://api.deepseek.com",
-      "model": "deepseek-reasoner",
-      "api_key": "sk-xxxxxxxx"
-    }
+    "easy":   { "url": "http://127.0.0.1:8088",    "model": "Qwen3.5-0.8B",      "api_key": "" },
+    "middle": { "url": "http://127.0.0.1:8088",    "model": "MiniCPM5-1B",       "api_key": "" },
+    "hard":   { "url": "https://api.deepseek.com", "model": "deepseek-reasoner", "api_key": "sk-xxxxxxxx" }
   }
 }
 ```
 
-Above, `easy` / `middle` keep using the local service while only `hard` switches to a cloud URL, model and key.
+Here `easy` / `middle` use the local llama.cpp (no key needed) while `hard` goes to DeepSeek in the cloud (an `https://...` URL means HTTPS). You may also write only the level that differs (e.g. just `backends.hard`) and let the others inherit the defaults above — that merely splits one setting across two places, so it is not recommended.
+
+For a given level, `backends.<level>.model` **wins**: when non-empty it overrides `model_<level>`, and the latter has no effect if both are set.
 
 The `laya` backend uses laya's `score` head to grade the request into three difficulty buckets (chitchat / most everyday questions / complex reasoning and hard programming) and maps the result to a level. On failure it falls back to `easy`. The judge does not see the last message alone but a structured summary compressed from the whole conversation (see below).
 
