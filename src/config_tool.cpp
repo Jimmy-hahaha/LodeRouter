@@ -62,8 +62,7 @@ int main() {
     config["model_middle"] = ask("model_middle");
     config["model_hard"] = ask("model_hard");
 
-    // 三个挡位可以各自指向不同服务（本地 llama.cpp 或云端 API）；
-    // 每一项留空表示沿用上面的默认值。
+    // ───────── 挡位配置：三个挡位可各自指定 url / model / api_key，留空即沿用上面的默认值 ─────────
     std::cout << "\n每个挡位可以单独指定 url/model/api_key，留空即沿用上面的默认值。\n";
     for (const char* lv : {"easy", "middle", "hard"}) {
         std::cout << "-- " << lv << " --\n";

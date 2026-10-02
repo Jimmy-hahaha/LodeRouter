@@ -29,6 +29,7 @@ using json = nlohmann::json;
 
 namespace cfg {
 
+// ───────── 路径探测：定位可执行文件、家目录与平台约定的配置/缓存目录 ─────────
 inline fs::path getExecutablePath() {
 #if defined(_WIN32)
     wchar_t buf[MAX_PATH];
@@ -81,8 +82,6 @@ inline fs::path getUserConfigDir(const std::string& appName) {
 #endif
 }
 
-// 缓存目录：自动下载的模型放这里，既不污染配置目录也不污染安装目录。
-// Linux 走 XDG_CACHE_HOME/~/.cache，macOS 走 ~/Library/Caches，Windows 走 %LOCALAPPDATA%。
 inline fs::path getUserCacheDir(const std::string& appName) {
 #if defined(_WIN32)
     const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
@@ -99,6 +98,7 @@ inline fs::path getUserCacheDir(const std::string& appName) {
 #endif
 }
 
+// ───────── 配置定位：按环境变量 → 用户配置目录 → 可执行文件旁 → 当前目录查找 ─────────
 inline fs::path locateConfigFile(const std::string& appName,
                                  const std::string& fileName = "config.json") {
     if (const char* env = std::getenv("MYAPP_CONFIG")) {
@@ -120,8 +120,7 @@ inline fs::path locateConfigFile(const std::string& appName,
     return userConfig;
 }
 
-// 后端地址常直接从 llama.cpp server 的 --host 抄成 0.0.0.0 / ::，但这两个地址只在 bind
-// 时有意义，作为客户端目的地址连不上。这里把 URL 里的监听地址改写成回环地址。
+// ───────── 地址规整：把 0.0.0.0 / :: 这类监听地址改写成回环地址 ─────────
 inline std::string normalize_client_host(const std::string& url) {
     const size_t scheme_end = url.find("://");
     if (scheme_end == std::string::npos) return url;
@@ -133,15 +132,15 @@ inline std::string normalize_client_host(const std::string& url) {
     std::string authority = url.substr(host_begin, host_end - host_begin);
     if (authority.empty()) return url;
 
-    std::string userinfo;  // user:pass@
+    std::string userinfo;
     if (size_t at = authority.rfind('@'); at != std::string::npos) {
         userinfo = authority.substr(0, at + 1);
         authority = authority.substr(at + 1);
     }
 
-    std::string host = authority, suffix;  // suffix 保留 ":port"，原样拼回
+    std::string host = authority, suffix;
     if (host.empty()) return url;
-    if (host.front() == '[') {  // [::1]:8088
+    if (host.front() == '[') {
         const size_t close = host.find(']');
         if (close == std::string::npos) return url;
         host = host.substr(0, close + 1);
@@ -159,6 +158,7 @@ inline std::string normalize_client_host(const std::string& url) {
     return url.substr(0, host_begin) + userinfo + replacement + suffix + url.substr(host_end);
 }
 
+// ───────── JSON 读写：config.json 的载入与写出 ─────────
 inline json loadJson(const fs::path& file) {
     std::ifstream ifs(file);
     if (!ifs.is_open()) {
@@ -178,6 +178,7 @@ inline void saveJson(const fs::path& file, const json& j) {
     ofs << j.dump(4);
 }
 
+// ───────── 默认配置：config.json 不存在时写出的初始内容 ─────────
 inline json defaultConfig() {
     return json{
         {"host", "127.0.0.1"},
@@ -186,15 +187,12 @@ inline json defaultConfig() {
         {"judge_backend", "laya"},
         {"judge_url", ""},
         {"judge_model_dir", ""},
-        // 本地找不到 laya 模型时，是否自动从 HuggingFace 下载（约 873 MB）
         {"judge_auto_download", true},
         {"api_key", ""},
         {"judge_api_key", ""},
         {"model_easy", ""},
         {"model_middle", ""},
         {"model_hard", ""},
-        // 三个档位可以各自指向不同的服务（本地 llama.cpp 或云端 API）：
-        // 这里留空，启动时按上面的默认值补齐，需要区分再逐档填写。
         {"backends", {
             {"easy",   {{"url", ""}, {"model", ""}, {"api_key", ""}}},
             {"middle", {{"url", ""}, {"model", ""}, {"api_key", ""}}},
@@ -205,6 +203,7 @@ inline json defaultConfig() {
 
 }
 
+// ───────── 解析辅助：从 JSON 取字符串、从终端读隐藏输入（密码） ─────────
 namespace {
 
 std::string get_str(const json& j, const std::string& name) {
@@ -261,15 +260,13 @@ std::string read_masked() {
 
 }
 
+// ───────── 全局配置项：由 config.json 载入，router 与 config_tool 共享 ─────────
 inline std::string host = "127.0.0.1";
 inline int port = 8080;
 inline std::string backend_url = {};
-// 裁判后端：laya（同目录 laya 项目的本地 ONNX 模型）或 http（judge_url 的 OpenAI 兼容接口）
 inline std::string judge_backend = "laya";
 inline std::string judge_url = {};
-// laya 模型目录（含 model.onnx 与 tokenizer.json）；为空时自动探测
 inline std::string judge_model_dir = {};
-// 本地找不到 laya 模型时是否自动从 HuggingFace 下载；LODE_JUDGE_AUTO_DOWNLOAD=0 可临时关闭
 inline bool judge_auto_download = true;
 inline std::string api_key = {};
 inline std::string judge_api_key = {};
@@ -277,11 +274,9 @@ inline std::string model_easy = {};
 inline std::string model_middle = {};
 inline std::string model_hard = {};
 
-// 难度挡位。裁判只需要回答"该用哪一档"，具体用哪个服务由挡位决定，
-// 这样三个档位可以分别指向本地 llama.cpp 或云端 API。
+// ───────── 难度挡位：三个挡位各自解析出的目标后端（url / model / api_key） ─────────
 enum class Level { Easy = 0, Middle = 1, Hard = 2 };
 
-// 一个挡位的目标服务：url 为空表示没配（不可用），model 为空表示没配。
 struct Backend {
     std::string url;
     std::string model;
@@ -289,7 +284,6 @@ struct Backend {
     bool ready() const { return !url.empty() && !model.empty(); }
 };
 
-// 三个挡位最终解析出来的目标；缺省值来自 backend_url / api_key / model_*
 inline Backend backend_easy{};
 inline Backend backend_middle{};
 inline Backend backend_hard{};
@@ -310,6 +304,7 @@ inline const Backend& backend_for(Level lv) {
     }
 }
 
+// ───────── 配置加载：读取 config.json，按挡位解析各后端并规整监听地址 ─────────
 inline void init_config() {
     fs::path file = cfg::locateConfigFile("LodeRouter");
     if (file.empty()) {
@@ -350,7 +345,6 @@ inline void init_config() {
         model_middle = get_str(j, "model_middle");
         model_hard = get_str(j, "model_hard");
 
-        // 后端地址抄了 --host 0.0.0.0 时也能连上
         auto fix_listen_addr = [](std::string& url, const char* name) {
             const std::string fixed = cfg::normalize_client_host(url);
             if (fixed != url) {
@@ -362,9 +356,6 @@ inline void init_config() {
         fix_listen_addr(backend_url, "backend_url");
         fix_listen_addr(judge_url, "judge_url");
 
-        // 按挡位解析目标服务：先从 backend_url / api_key / model_* 填缺省值，
-        // 再用 backends.<level>.{url,model,api_key} 里非空的字段覆盖。
-        // 于是旧的 config.json（没有 backends）行为完全不变。
         auto load_backend = [&](const char* name, Backend& b, const std::string& fallback_model) {
             b.url = backend_url;
             b.model = fallback_model;

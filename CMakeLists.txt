@@ -6,9 +6,7 @@ project(LodeRouter
     LANGUAGES CXX
 )
 
-# ---------------------------------------------------------------------------
-# Global settings
-# ---------------------------------------------------------------------------
+# ───────── Global settings ─────────
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -20,18 +18,14 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
         Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
-# ---------------------------------------------------------------------------
-# Options
-# ---------------------------------------------------------------------------
+# ───────── Options ─────────
 set(LODEROUTER_LINKER "auto" CACHE STRING
     "Linker backend: auto | mold | default")
 set_property(CACHE LODEROUTER_LINKER PROPERTY STRINGS auto mold default)
 
 option(LODEROUTER_USE_PCH "Enable precompiled headers" ON)
 
-# ---------------------------------------------------------------------------
-# Linker selection (mold with graceful fallback)
-# ---------------------------------------------------------------------------
+# ───────── Linker selection (mold with graceful fallback) ─────────
 set(_loderouter_use_mold FALSE)
 
 if(LODEROUTER_LINKER STREQUAL "mold")
@@ -74,9 +68,7 @@ if(_loderouter_use_mold)
     endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# Targets
-# ---------------------------------------------------------------------------
+# ───────── Targets ─────────
 add_executable(LodeRouter
     src/main.cpp
 )
@@ -85,9 +77,7 @@ add_executable(config_tool
     src/config_tool.cpp
 )
 
-# ---------------------------------------------------------------------------
-# Precompiled headers (opt-in)
-# ---------------------------------------------------------------------------
+# ───────── Precompiled headers (opt-in) ─────────
 if(LODEROUTER_USE_PCH)
     target_precompile_headers(LodeRouter
         PRIVATE
@@ -105,9 +95,7 @@ else()
     message(STATUS "PCH:     disabled")
 endif()
 
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
+# ───────── Dependencies ─────────
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(fmt CONFIG QUIET)
@@ -126,10 +114,7 @@ foreach(_target LodeRouter config_tool)
     )
 endforeach()
 
-# ---------------------------------------------------------------------------
-# Laya judge backend (sibling project: ../laya)
-# ---------------------------------------------------------------------------
-# 裁判模型用同目录的 laya 项目（本地 ONNX 推理），默认 ../laya/cpp。
+# ───────── Laya judge backend (sibling project: ../laya/cpp, local ONNX judge) ─────────
 set(LAYA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../laya/cpp" CACHE PATH
     "Directory of the laya C++ project (contains CMakeLists.txt, laya.cpp, laya.h)")
 
@@ -141,7 +126,7 @@ endif()
 
 add_subdirectory("${LAYA_DIR}" "${CMAKE_BINARY_DIR}/laya" EXCLUDE_FROM_ALL)
 
-# 构建时记录的 laya 模型路径，运行时找不到 judge_model_dir 时作为自动探测候选。
+# ───────── Build-time default for the laya model dir (auto-detection fallback) ─────────
 set(LAYA_MODEL_DIR "${LAYA_DIR}/../laya-zh-onnx-int8" CACHE PATH
     "laya ONNX model directory used as the build-time default for auto-detection")
 get_filename_component(LAYA_MODEL_DIR "${LAYA_MODEL_DIR}" ABSOLUTE)

@@ -7,8 +7,7 @@
 #include "../include/spdlog/sinks/basic_file_sink.h"
 #include "../include/spdlog/sinks/stdout_color_sinks.h"
 
-// 日志默认同时输出到终端与文件。
-// 设置环境变量 LODE_LOG_CONSOLE=0（或 off）可关闭终端输出，只写文件。
+// ───────── 日志：同时写 router.log 与终端，LODE_LOG_CONSOLE=0 可只写文件 ─────────
 void init_logger() {
     std::vector<spdlog::sink_ptr> sinks;
     sinks.push_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("router.log"));
@@ -26,6 +25,7 @@ void init_logger() {
     spdlog::register_logger(logger);
 }
 
+// ───────── 输出封装：info / warn / error 三个级别，统一走 "router" logger ─────────
 inline void log_info(const std::string& msg) {
     auto logger = spdlog::get("router");
     if (logger) logger->info("{}", msg);

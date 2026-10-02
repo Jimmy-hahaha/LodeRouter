@@ -13,26 +13,19 @@
 
 namespace fs = std::filesystem;
 
-// HuggingFace 文件下载器：第一次运行、本地又找不到 laya 模型时用它把模型拉下来。
-// 复用项目已有的 cpp-httplib + OpenSSL（已开 HTTPS），不引入额外依赖。
-//
-// 默认先走 hf-mirror.com（国内可直连），不通再回退 huggingface.co；
-// 也可以用 HF_ENDPOINT 指定唯一下载站（例如 HF_ENDPOINT=https://huggingface.co）。
+// ───────── 模型下载器：首次运行时从 HuggingFace 镜像把 laya 模型拉到本地缓存 ─────────
 namespace lode_dl {
 
-// 每一段的大小。国内镜像对单个长连接会限速、下到几百 MB 后还会直接掐断
-// （实测 873 MB 的文件在 256 MB / 533 MB 两处断掉），所以按固定大小切段，
-// 每段一个请求，断了就接着下一段继续。
+// ───────── 分段参数：每段 32 MB、最多 400 段，镜像掐断后接着下一段续传 ─────────
 constexpr uint64_t kSegmentBytes = 32ull * 1024 * 1024;
-// 一段最多重试这么多轮，避免镜像长时间抽风时无限循环
 constexpr int kMaxSegments = 400;
 
+// ───────── 下载源：默认 hf-mirror.com → huggingface.co，HF_ENDPOINT 可指定唯一点 ─────────
 inline std::string trim_slashes(std::string s) {
     while (!s.empty() && s.back() == '/') s.pop_back();
     return s;
 }
 
-// 候选下载站，按顺序尝试。显式设置了 HF_ENDPOINT 就只用它，不再偷偷换站。
 inline std::vector<std::string> candidates() {
     if (const char* env = std::getenv("HF_ENDPOINT"); env && *env) {
         return {trim_slashes(std::string(env))};
@@ -43,12 +36,12 @@ inline std::vector<std::string> candidates() {
 inline httplib::Client make_client(const std::string& endpoint) {
     httplib::Client cli(endpoint);
     cli.set_connection_timeout(15);
-    cli.set_read_timeout(60);       // 单个 socket 读的超时，不是整个下载的总时长
-    cli.set_follow_location(true);  // HF / 镜像都会 302 到 CDN，httplib 默认不跟随
+    cli.set_read_timeout(60);
+    cli.set_follow_location(true);
     return cli;
 }
 
-// 用几百字节的小文件探活：站点通不通要在下 873 MB 之前就知道。
+// ───────── 能力探测：先用小文件探活，再确认支持 Range 并取回文件总大小 ─────────
 inline bool probe(const std::string& endpoint, const std::string& probe_repo_path) {
     if (probe_repo_path.empty()) return true;
     auto cli = make_client(endpoint);
@@ -59,7 +52,6 @@ inline bool probe(const std::string& endpoint, const std::string& probe_repo_pat
     return res && res->status == 200 && res->body.size() > 10;
 }
 
-// 探测能否按 Range 分段下载：请求 1 KB，返回 206 才算支持，同时解析出文件总大小。
 inline bool probe_range(const std::string& endpoint, const std::string& repo_path,
                         uint64_t have, uint64_t& total_size) {
     auto cli = make_client(endpoint);
@@ -72,7 +64,6 @@ inline bool probe_range(const std::string& endpoint, const std::string& repo_pat
     auto res = cli.Get("/" + repo_path, headers);
     if (!res || res->status != 206) return false;
 
-    // Content-Range: bytes 335544320-335545343/915648029
     const std::string cr = res->get_header_value("Content-Range");
     const size_t slash = cr.rfind('/');
     if (slash == std::string::npos) return false;
@@ -84,7 +75,7 @@ inline bool probe_range(const std::string& endpoint, const std::string& repo_pat
     return true;
 }
 
-// 取一段 [from, to] 追加到 part 末尾（调用方保证 from == part 当前大小）。
+// ───────── 取数方式：按 Range 追加一段，不支持 Range 时整文件重下 ─────────
 inline bool fetch_segment(const std::string& endpoint, const std::string& repo_path,
                           uint64_t from, uint64_t to, const fs::path& part, std::string& err) {
     auto cli = make_client(endpoint);
@@ -113,12 +104,10 @@ inline bool fetch_segment(const std::string& endpoint, const std::string& repo_p
     ofs.close();
 
     if (!res) {
-        // 网络断了：已经落盘的部分是合法的前缀，留着下次继续
         err = "cannot reach " + endpoint + " (" + httplib::to_string(res.error()) + ")";
         return false;
     }
     if (res->status != 206) {
-        // 服务端没按 Range 回：body 可能是整个文件，已经追加进去的是垃圾，必须回滚
         std::error_code tec;
         fs::resize_file(part, from, tec);
         err = "HTTP " + std::to_string(res->status) + " (expected 206 for a ranged request)";
@@ -131,7 +120,6 @@ inline bool fetch_segment(const std::string& endpoint, const std::string& repo_p
     return true;
 }
 
-// 不支持 Range 时的退路：一次性下载整个文件（先截断 .part）。
 inline bool download_whole(const std::string& endpoint, const std::string& repo_path,
                            const fs::path& part, const std::string& what, std::string& err) {
     auto cli = make_client(endpoint);
@@ -161,7 +149,6 @@ inline bool download_whole(const std::string& endpoint, const std::string& repo_
     auto res = cli.Get("/" + repo_path, httplib::Headers{}, receiver);
     ofs.close();
 
-    // 一个字节都没下到就别留下空的 .part 文件
     auto drop_if_empty = [&]() {
         std::error_code tec;
         if (fs::file_size(part, tec) == 0 && !tec) fs::remove(part, tec);
@@ -180,9 +167,7 @@ inline bool download_whole(const std::string& endpoint, const std::string& repo_
     return true;
 }
 
-// 下载 {endpoint}/{repo_path} 到 out。
-// 先写 out.part，只有下完整了才改名；失败时**保留** .part，下次启动从这里续。
-// repo_path 形如 "owner/repo/resolve/main/path/to/file"。
+// ───────── 单文件下载：写 .part，下完才改名，失败保留断点供下次续传 ─────────
 inline bool download_file(const std::string& endpoint, const std::string& repo_path,
                           const fs::path& out, const std::string& what, std::string& err) {
     std::error_code ec;
@@ -199,7 +184,6 @@ inline bool download_file(const std::string& endpoint, const std::string& repo_p
 
     uint64_t total = 0;
     if (!probe_range(endpoint, repo_path, have, total)) {
-        // 服务端不给 Range：只能一次性下完（网络一抖就得重来，所以是退路）
         log_info(what + ": server does not support ranged download, fetching in one go");
         if (!download_whole(endpoint, repo_path, part, what, err)) return false;
         fs::rename(part, out, ec);
@@ -221,7 +205,6 @@ inline bool download_file(const std::string& endpoint, const std::string& repo_p
     for (int segment = 0; have < total && segment < kMaxSegments; ++segment) {
         const uint64_t to = std::min(have + kSegmentBytes, total) - 1;
         if (!fetch_segment(endpoint, repo_path, have, to, part, err)) {
-            // 这一段没拿到（镜像掐断、限速超时……）：把已有的字节留着，接着重试
             log_warn(what + ": segment at " + std::to_string(have / (1024 * 1024)) +
                      " MB failed (" + err + "), retrying");
             uint64_t size = fs::file_size(part, ec);
@@ -229,7 +212,7 @@ inline bool download_file(const std::string& endpoint, const std::string& repo_p
                 err = "cannot stat " + part.string();
                 return false;
             }
-            if (size == have) continue;  // 一个字节都没进来，直接重试同一段
+            if (size == have) continue;
             have = size;
             continue;
         }
@@ -238,7 +221,7 @@ inline bool download_file(const std::string& endpoint, const std::string& repo_p
             err = "cannot stat " + part.string();
             return false;
         }
-        if (size == have) {  // 服务端说 206 却什么都没给，避免死循环
+        if (size == have) {
             err = "server returned no data for the requested range";
             return false;
         }
@@ -264,7 +247,7 @@ inline bool download_file(const std::string& endpoint, const std::string& repo_p
     return true;
 }
 
-// 按顺序下载一组文件；任意一个失败就返回 false（err 里是原因）。
+// ───────── 批量下载：按顺序拉一组文件，任一失败即中止 ─────────
 inline bool download_files(const std::string& endpoint,
                            const std::vector<std::pair<std::string, fs::path>>& files,
                            std::string& err) {
@@ -274,4 +257,4 @@ inline bool download_files(const std::string& endpoint,
     return true;
 }
 
-} // namespace lode_dl
+}

@@ -7,7 +7,7 @@
 #include "log.h"
 using json = nlohmann::json;
 
-// 裁判后端之一：judge_url 上的 OpenAI 兼容接口
+// ───────── http 裁判：调 judge_url 上的 OpenAI 兼容接口，按回复里的词判挡位 ─────────
 inline Level ask_judge_http(const std::string& input) {
     json req = {
         {"messages", {
@@ -34,8 +34,7 @@ inline Level ask_judge_http(const std::string& input) {
     return Level::Easy;
 }
 
-// 按 judge_backend 分派：laya（本地 ONNX 裁判模型）或 http（远程接口）。
-// 只回挡位，具体用哪个服务/模型由调用方按挡位去 backends 里查。
+// ───────── 裁判分派：按 judge_backend 选本地 laya 模型或 http 接口，只回挡位 ─────────
 inline Level ask_judge(const std::string& input) {
     if (judge_backend == "http") return ask_judge_http(input);
     return lode_judge_laya::ask_judge_laya(input);

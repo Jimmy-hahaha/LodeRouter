@@ -13,20 +13,14 @@
 #include "download.h"
 #include "log.h"
 
-// 裁判后端：同目录 laya 项目（../laya）的本地 ONNX 模型。
-// 用 laya 的 score 头把用户输入分成 easy / middle / hard 三档；
-// 每档具体指向哪个服务/模型由 config.json 里的 backends 决定。
-
+// ───────── laya 裁判：用本地 ONNX 模型打分，把输入判成 easy / middle / hard ─────────
 namespace lode_judge_laya {
 
+// ───────── 引擎与互斥量：引擎串行推理，后台热加载与请求共用一把锁 ─────────
 inline std::unique_ptr<laya::Engine> engine;
-// laya 引擎串行推理：一次 Run 内部已用满 onnxruntime 线程池，
-// 并发 Run 只会互相抢 CPU，这里直接串行以保证可预测的行为。
 inline std::mutex engine_mutex;
 
-// 难度档次：laya 官方 router preset 的 difficulty 问法（4 档），
-// 映射到路由器的 3 档：trivial/easy -> easy，moderate -> middle，hard -> hard。
-// 4 档比 3 档更容易让模型把"极端简单"和"需要几步推理"区分开。
+// ───────── 难度问法：laya 官方 router preset 的 4 档问法，映射到 3 档 ─────────
 inline const std::vector<std::string>& levels() {
     static const std::vector<std::string> lv = {
         "trivial: a lookup or one-liner",
@@ -39,6 +33,7 @@ inline const std::vector<std::string>& levels() {
 
 inline constexpr const char* instruction = "How hard is `request` for a language model?";
 
+// ───────── 目录探测：构建时路径 → 可执行文件旁 → 工作目录，认 model.onnx + tokenizer.json ─────────
 inline bool looks_like_model_dir(const fs::path& dir) {
     std::error_code ec;
     return fs::is_regular_file(dir / "model.onnx", ec) &&
@@ -51,7 +46,6 @@ inline fs::path normalize(const fs::path& p) {
     return ec ? p : abs;
 }
 
-// 依次尝试：构建时记录的 laya 模型路径 → 可执行文件所在目录 → 当前工作目录
 inline fs::path auto_detect_model_dir() {
     std::vector<fs::path> candidates;
 
@@ -77,12 +71,7 @@ inline fs::path auto_detect_model_dir() {
     return {};
 }
 
-// ---- 首次运行自动下载 ----
-// 本地找不到 laya 模型时，从 HuggingFace 拉一份到缓存目录。
-// 用 techtheist/laya-onnx 的 multilingual 导出（= convaiinnovations/laya-multilingual
-// 的 int8 量化）：输入输出名与 laya.cpp 期望的完全一致（input_ids/attention_mask/
-// marker_pos/marker_mask/qtype → logits + act_logits），tokenizer 也用 <bos>/<eos>/<mask>。
-// 官方 convaiinnovations/laya 仓库只有 PyTorch 权重、没有 ONNX，所以这里用社区导出。
+// ───────── 自动下载：本地无模型时从 HuggingFace 镜像取一份（约 873 MB，仅首次） ─────────
 inline constexpr const char* kHfRepo = "techtheist/laya-onnx/resolve/main/multilingual";
 
 inline fs::path downloaded_model_dir() {
@@ -106,7 +95,6 @@ inline bool download_laya_model() {
         {prefix + "/tokenizer.json", dir / "tokenizer.json"},
     };
 
-    // 先挑一个通的站再下大文件；默认顺序是 hf-mirror.com → huggingface.co
     std::string chosen;
     for (const auto& ep : lode_dl::candidates()) {
         if (lode_dl::probe(ep, prefix + "/rl_agent_config.json")) {
@@ -131,9 +119,7 @@ inline bool download_laya_model() {
     return looks_like_model_dir(dir);
 }
 
-// 返回本地已有的 laya 模型目录：显式配置（config 或环境变量）优先，且无效即报错；
-// 未显式配置时依次走「构建时记录的路径 / 可执行文件旁 / 工作目录 → 之前下载的缓存」。
-// 都没有就返回空，要不要下载由 init_laya_judge 决定。
+// ───────── 模型解析：显式配置优先，其次自动探测与已下载的缓存 ─────────
 inline fs::path resolve_model_dir() {
     std::string explicit_dir = judge_model_dir;
     if (const char* env = std::getenv("LODE_JUDGE_MODEL_DIR"); env && *env) {
@@ -153,13 +139,11 @@ inline fs::path resolve_model_dir() {
     if (!p.empty()) return p;
 
     fs::path cache = downloaded_model_dir();
-    if (looks_like_model_dir(cache)) return cache;  // 之前已经下载过
+    if (looks_like_model_dir(cache)) return cache;
     return {};
 }
 
-// 后台下载 + 完成后热加载：873 MB 在国内镜像上要几分钟，
-// 同步下载会让路由器"启动后一直没反应"，所以先把服务跑起来，
-// 这期间判定回退 easy，模型就绪后自动接管。
+// ───────── 启动初始化：后台下载并在就绪后热加载，缺模型时才请求下载 ─────────
 inline void start_background_download() {
     std::thread([]() {
         if (!download_laya_model()) {
@@ -206,12 +190,10 @@ inline bool init_laya_judge() {
     return true;
 }
 
-// 返回这次请求该用的挡位（与 http 后端语义一致：判定失败则回退 easy）
+// ───────── 判定入口：调 score 头取挡位，失败一律回退 easy ─────────
 inline Level ask_judge_laya(const std::string& input) {
-    // engine 可能正被后台下载线程替换，读和推理都放在同一把锁下
     std::lock_guard<std::mutex> lock(engine_mutex);
     if (!engine) {
-        // 后台下载期间每个请求都会走到这里，只提示一次，别刷屏
         static std::atomic<bool> warned{false};
         if (!warned.exchange(true)) {
             log_warn("laya judge: engine not ready yet (model still downloading?) - "
@@ -225,7 +207,7 @@ inline Level ask_judge_laya(const std::string& input) {
         switch (ans.index) {
             case 2: lv = Level::Middle; break;
             case 3: lv = Level::Hard; break;
-            default: lv = Level::Easy; break;  // trivial / easy
+            default: lv = Level::Easy; break;
         }
         log_info(ans.label + " (" + std::to_string(ans.confidence) + ") -> " + level_name(lv));
         return lv;
@@ -235,4 +217,4 @@ inline Level ask_judge_laya(const std::string& input) {
     return Level::Easy;
 }
 
-} // namespace lode_judge_laya
+}
