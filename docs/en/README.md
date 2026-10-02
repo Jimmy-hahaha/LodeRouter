@@ -96,9 +96,10 @@ With a single backend, `backend_url` + the three `model_*` entries are enough. W
 ```json
 {
   "backends": {
-    "easy":   { "url": "http://127.0.0.1:8088",    "model": "Qwen3.5-0.8B",      "api_key": "" },
-    "middle": { "url": "http://127.0.0.1:8088",    "model": "MiniCPM5-1B",       "api_key": "" },
-    "hard":   { "url": "https://api.deepseek.com", "model": "deepseek-reasoner", "api_key": "sk-xxxxxxxx" }
+      "easy":   { "url": "", "model": "", "api_key": "" },
+      "middle": { "url": "", "model": "", "api_key": "" },
+      "hard":   { "url": "", "model": "", "api_key": "" }
+
   }
 }
 ```
