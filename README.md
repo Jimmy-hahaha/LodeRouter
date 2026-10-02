@@ -1,18 +1,41 @@
-[English](./docs/en/README.md) | [简体中文](./docs/zh-CN/README.md)
+<div align="center">
 
 # LodeRouter
 
-以本地 Laya 裁判判断问题难度，自动路由到对应模型，在保证回答质量的同时降低推理成本。
+**先判断难度，再挑模型。**
+
+简单问题交给小模型，复杂问题才动用大模型，回答质量不变、推理成本更低。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)]()
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
 
-## 核心功能
+[English](./docs/en/README.md) · [简体中文](./docs/zh-CN/README.md)
 
-- Laya 本地裁判：难度判断在本地 ONNX 模型上完成，不调用任何模型 API
-- 判断依据是整段对话压缩出的概要，而不是最后一句用户消息
-- 按难度路由到 `model_easy` / `model_middle` / `model_hard`
-- 三个挡位可指向不同服务，本地 llama.cpp 与云端 API 混用
+</div>
+
+## 工作方式
+
+```mermaid
+flowchart LR
+    C[客户端] --> R[LodeRouter]
+    R --> J{本地 Laya 裁判}
+    J -->|easy| A[小模型]
+    J -->|middle| M[中等模型]
+    J -->|hard| H[大模型 / 云端 API]
+```
+
+| 挡位 | 适合的问题 | 后端示例 |
+| --- | --- | --- |
+| `easy` | 闲聊、查事实、一句话能答 | 本地小模型 |
+| `middle` | 多数日常问题、几步就能做完 | 中等模型 |
+| `hard` | 多步推理、专业领域、高难度编程 | 大模型 / 云端 API |
+
+三个要点：
+
+- **难度在本地判断** —— Laya 裁判是一个 ONNX 模型，跑在本机，不调用任何模型 API
+- **看整段对话，不看最后一句** —— 裁判的输入是整段会话压缩出的概要（256 token 预算）
+- **三档可以各走各的** —— 本地 llama.cpp 与云端 API 混用，每一档用自己的 key
 
 ## 快速开始
 
@@ -23,103 +46,67 @@ mkdir build && cd build
 cmake .. && cmake --build .
 ```
 
-依赖 CMake ≥ 3.20、C++20、OpenSSL、Threads、onnxruntime。裁判模型来自同目录的 laya 项目（默认 `../laya/cpp`，可用 `-DLAYA_DIR=` 指定）。
+需要 CMake ≥ 3.20、C++20 编译器、OpenSSL、Threads、onnxruntime。裁判代码来自同目录的 laya 项目，默认 `../laya/cpp`，可用 `-DLAYA_DIR=` 指定。
 
-### 2. 获取裁判模型（laya）
+### 2. 裁判模型（通常不用管）
 
-不需要 API Key，三种方式任选：
+首次启动时本地没有模型，它会**在后台下载**（约 873 MB），服务立刻就能用；下载期间请求按 `easy` 档处理，模型就绪后自动接管。不需要任何 API Key。
 
-**自动下载（默认）**：首次启动时本地找不到模型，会**在后台下载**，服务立即可用（期间请求按 `easy` 档处理，下完自动接管）：
-
-```
-[info] laya judge: model not found locally, downloading techtheist/laya-onnx/resolve/main/multilingual in the background (about 873 MB, one time only)
-[info] router listening on 127.0.0.1:8080
-[info] model.onnx: 64 MB ...
-[info] laya judge loaded from /home/you/.cache/LodeRouter/laya-onnx-multilingual (downloaded in background)
-```
-
-下载的是 `techtheist/laya-onnx` 的 `multilingual` int8 量化版（873 MB，I/O 名与 laya C++ 端一致；官方 `convaiinnovations/laya` 只有 PyTorch 权重、没有 ONNX）。默认走 `hf-mirror.com`，不通回退 `huggingface.co`，可用 `HF_ENDPOINT` 指定唯一站点。下载按 32 MB 切段、失败自动重试并从断点续传。缓存目录：Linux `~/.cache/LodeRouter`、macOS `~/Library/Caches/LodeRouter`、Windows `%LOCALAPPDATA%\LodeRouter\Cache`。关闭自动下载：配置写 `"judge_auto_download": false`，或设 `LODE_JUDGE_AUTO_DOWNLOAD=0`。
-
-**手动下载**：两个文件放进同一目录即可：
-
-```bash
-BASE=https://hf-mirror.com/techtheist/laya-onnx/resolve/main/multilingual
-curl -L -o tokenizer.json "$BASE/tokenizer.json"
-curl -L -C - -o model.onnx "$BASE/model_int8.onnx"   # 873 MB，-C - 断了可续传
-```
-
-再在配置里写 `"judge_model_dir": "/home/you/laya-onnx"`。
-
-**自己的模型**：任何 laya 格式的 ONNX 目录（`model.onnx` + `tokenizer.json`，tokenizer 里有 `<bos>` / `<eos>` / `<mask>`）都行，也可以用 `edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onnx` 从别的 checkpoint 导出。
+想手动下载、或换成自己的模型？见[裁判模型](./docs/zh-CN/README.md#裁判模型)。
 
 ### 3. 配置
 
-用编译好的 `config_tool` 问答式生成，或手动写到 `~/.config/LodeRouter/config.json`（macOS / Windows 路径见 `config_tool` 提示）：
+```bash
+./config_tool    # 问答式生成 ~/.config/LodeRouter/config.json
+```
+
+只有一个后端时，手写这几行就够：
 
 ```json
 {
-  "host": "127.0.0.1",
-  "port": 8080,
-  "backend_url": "",
-  "judge_backend": "laya",
-  "api_key": "",
-  "model_easy": "",
-  "model_middle": "",
-  "model_hard": ""
+  "backend_url": "http://127.0.0.1:8088",
+  "model_easy": "<小模型名>",
+  "model_middle": "<中等模型名>",
+  "model_hard": "<大模型名>"
 }
 ```
 
-只有一个后端时填 `backend_url` + 三个 `model_*` 就够；三个挡位指向不同服务时，统一写进 `backends.*`：
+三档指向不同服务时写 `backends.*`，全部字段见[配置项](./docs/zh-CN/README.md#配置项)。
 
-```json
-{
-  "backends": {
-    "easy":   { "url": "", "model": "", "api_key": "" },
-    "middle": { "url": "", "model": "", "api_key": "" },
-    "hard":   { "url": "", "model": "", "api_key": "" }
-  }
-}
-```
-
-`backends.<level>` 里省掉的字段继承 `backend_url` / `model_<level>` / `api_key`；同一挡位的模型名以 `backends.<level>.model` 为准。其余字段（`judge_url`、`judge_model_dir`、`judge_auto_download`、`judge_api_key`）和各字段的完整说明见 [docs/zh-CN/README.md](./docs/zh-CN/README.md)。
-
-### 4. 运行与使用
+### 4. 启动，接上客户端
 
 ```bash
-./LodeRouter
+./LodeRouter    # 默认监听 127.0.0.1:8080
 ```
 
-每个挡位的服务都要支持 **OpenAI 兼容 API**。客户端把 `base_url` 指向路由器地址、`api_key` 随便填（不校验）、`model` 填 `auto`：
+把客户端的 `base_url` 指向它、`model` 填 `auto`，`api_key` 随便填（不校验）：
 
 ```json
 { "base_url": "http://127.0.0.1:8080", "api_key": "anything", "model": "auto" }
 ```
 
-请求里的 `model` 会被换成判定挡位的模型名；`GET /v1/models` 返回 `auto` 和三档模型名；响应始终以 SSE 透传给客户端。日志里能看到每次判定，例如 `middle -> deepseek-reasoner @ https://api.deepseek.com (ctx 59 tok / 3 turn / 3 err)`。
+各档服务都需要支持 OpenAI 兼容 API。响应以 SSE 透传，客户端记得开启流式接收；每次判定到哪一档、依据了多少上下文，都会写进日志。
 
-## 难度判断的输入
+## 裁判看到什么
 
-裁判看到的不是最后一句用户消息，而是整段对话压缩出的结构化概要（预算 256 token）：
+不是最后一句用户消息，而是整段对话压缩出的概要：
 
-```
+```text
 [轮次] 第 4 轮
 [任务] 再试一次
 [报错] 编译报错了：undefined reference to `parse_config'
 [约束] 必须保持 ABI 兼容，不能升级依赖
 ```
 
-同一句「hi」，单轮会话判 `easy`，带着「失败重试 3 次 + 报错」上下文的会话判 `middle`。
+所以同一句「hi」，单轮会话判 `easy`，带着「重试 3 次 + 报错」的上下文就判 `middle`。
 
-## 项目结构
+## 文档
 
-```
-├── CMakeLists.txt
-├── config/config.json          # 配置模板
-├── docs/{en,zh-CN}/README.md   # 完整文档
-├── include/{cpp-httplib,json,spdlog}
-└── src/                        # compress config config_tool download judge judge_laya log main router
-```
+| 文档 | 内容 |
+| --- | --- |
+| [完整文档（简体中文）](./docs/zh-CN/README.md) | 全部配置项、模型获取方式、日志与启动行为 |
+| [Full documentation (English)](./docs/en/README.md) | Everything above, in English |
 
 ## 开源协议
 
-MIT License
+[MIT License](LICENSE)
