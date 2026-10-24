@@ -46,7 +46,7 @@ mkdir build && cd build
 cmake .. && cmake --build .
 ```
 
-需要 CMake ≥ 3.20、C++20 编译器、OpenSSL、Threads、onnxruntime。裁判代码来自同目录的 laya 项目，默认 `../laya/cpp`，可用 `-DLAYA_DIR=` 指定。
+需要 CMake ≥ 3.20、C++20 编译器、OpenSSL、Threads、onnxruntime。裁判的纯 C++ 运行时在仓库内 `laya/cpp`（与 `laya/` 里的模型配套），构建时一并编译；也可用 `-DLAYA_DIR=` 指向外部的 laya 项目。
 
 ### 2. 裁判模型（需要先准备）
 

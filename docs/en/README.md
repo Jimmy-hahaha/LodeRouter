@@ -30,7 +30,7 @@ cmake .. && cmake --build .
 ./LodeRouter     # listens on 127.0.0.1:8080 by default
 ```
 
-Requires CMake ≥ 3.20, a C++20 compiler, OpenSSL, Threads and onnxruntime; optional `fmt` (enabled when present) and the `mold` linker (auto-detected, or `-DLODEROUTER_LINKER=`). The judge model comes from the sibling laya project (default `../laya/cpp`, override with `-DLAYA_DIR=`), which is built along with the router.
+Requires CMake ≥ 3.20, a C++20 compiler, OpenSSL, Threads and onnxruntime; optional `fmt` (enabled when present) and the `mold` linker (auto-detected, or `-DLODEROUTER_LINKER=`). The judge's pure C++ runtime lives in-tree at `laya/cpp` (next to the exported model in `laya/`) and is built with the router; override with `-DLAYA_DIR=` to use an external laya project.
 
 ## The judge model
 
@@ -179,6 +179,7 @@ Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > 
 ├── finetune/                       # three-class data, fine-tuning and ONNX export
 ├── docs/{en,zh-CN}/README.md       # full documentation
 ├── include/{cpp-httplib,json,spdlog}
+├── laya/                           # fine-tuned ONNX model + laya/cpp pure C++ runtime
 └── src/                            # compress config config_tool download judge judge_laya log main router
 ```
 

@@ -1,6 +1,7 @@
 *.o
 *.obj
 build/
+build-laya/
 *.swp
 *~
 *.log

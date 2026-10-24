@@ -1,0 +1,451 @@
+{
+  "schema": "laya-oracle-baseline/1",
+  "generated_at": "2026-10-24T21:28:39+08:00",
+  "generated_by": "tools/laya_oracle/dump_reference.py",
+  "partial": false,
+  "commands": [
+    "/home/xuejiaming/Dev/project/LodeRouter/.cache/laya-ft/venv/bin/python tools/laya_oracle/dump_reference.py"
+  ],
+  "environment": {
+    "repo_root": "/home/xuejiaming/Dev/project/LodeRouter",
+    "python": "3.14.8",
+    "python_executable": "/home/xuejiaming/Dev/project/LodeRouter/.cache/laya-ft/venv/bin/python",
+    "platform": "Linux-7.2.11-arch1-1-x86_64-with-glibc2.44",
+    "onnxruntime": "1.31.0",
+    "transformers": "5.20.2",
+    "numpy": "2.5.4",
+    "git_commit": "1e480baac61a088834a48800153ee636e25dfe2a"
+  },
+  "model": {
+    "dir": "laya",
+    "onnx": "laya/model.onnx",
+    "onnx_bytes": 925211605,
+    "max_len": 512,
+    "head_max_len": 256,
+    "temperature": [
+      1.0,
+      1.1558657884597778,
+      1.0
+    ],
+    "temperature_clamped": [
+      1.0,
+      1.1558657884597778,
+      1.0
+    ],
+    "temperature_by_options": {},
+    "applied_score_temperature": 1.1558657884597778,
+    "qtype": {
+      "name": "score",
+      "value": 1
+    },
+    "option_layout": "sequential"
+  },
+  "pipeline": {
+    "sequence": "[CLS] head [SEP] option0 [SEP] ... state[:room] [SEP]; head = 'score question: ' + instruction, options = 'level i: level'",
+    "option_truncation": "truncation=True max_length=48 on ' ' + option",
+    "state_truncation": "right truncation to max_len - len(head) - 1 tokens",
+    "probabilities": "softmax(float32 logits / temperature[1]), float32 numpy; rounded4 variants mirror ONNXAgent output",
+    "confidence": "max(p) (laya.answer_confidence / C++ ScoreResult.confidence)",
+    "entropy_confidence": "1 - H(p)/log(k) (laya.confidence_from_probs)",
+    "reference_run_mode": "one row per ONNX session run (no padding)",
+    "inference_seconds": 22.697950839996338,
+    "seconds_per_row": 0.06878166921211011
+  },
+  "dataset": {
+    "eval_source": "finetune/data/eval.jsonl",
+    "eval_rows": 330,
+    "unique_states": 330,
+    "max_state_tokens": 43,
+    "max_seq_len": 122,
+    "head_len_values": [
+      78
+    ],
+    "marker_layouts": [
+      [
+        13,
+        35,
+        55
+      ]
+    ],
+    "truncated_rows": []
+  },
+  "items": 330,
+  "correct": 307,
+  "accuracy": 0.9303030303030303,
+  "accuracy_by_round_score": 0.9212121212121213,
+  "round_score_vs_argmax_mismatches": [
+    {
+      "id": "eval:0017",
+      "expected": 1,
+      "predicted_argmax": 2,
+      "round_score": 1,
+      "score": 1.3233293239027262
+    },
+    {
+      "id": "eval:0033",
+      "expected": 0,
+      "predicted_argmax": 0,
+      "round_score": 1,
+      "score": 0.8992815390229225
+    },
+    {
+      "id": "eval:0079",
+      "expected": 0,
+      "predicted_argmax": 0,
+      "round_score": 1,
+      "score": 0.5566928423941135
+    },
+    {
+      "id": "eval:0120",
+      "expected": 0,
+      "predicted_argmax": 2,
+      "round_score": 1,
+      "score": 1.4676809459924698
+    },
+    {
+      "id": "eval:0177",
+      "expected": 0,
+      "predicted_argmax": 0,
+      "round_score": 1,
+      "score": 0.8919612020254135
+    },
+    {
+      "id": "eval:0246",
+      "expected": 0,
+      "predicted_argmax": 0,
+      "round_score": 1,
+      "score": 0.5690961723448709
+    }
+  ],
+  "per_class": {
+    "0": {
+      "label": "chitchat",
+      "items": 106,
+      "correct": 97,
+      "accuracy": 0.9150943396226415,
+      "mean_answer_confidence": 0.9356389832946489
+    },
+    "1": {
+      "label": "math",
+      "items": 111,
+      "correct": 103,
+      "accuracy": 0.9279279279279279,
+      "mean_answer_confidence": 0.905634761930586
+    },
+    "2": {
+      "label": "code",
+      "items": 113,
+      "correct": 107,
+      "accuracy": 0.9469026548672567,
+      "mean_answer_confidence": 0.9440056839875416
+    }
+  },
+  "confusion_matrix": {
+    "rows_expected_cols_predicted": true,
+    "labels": [
+      "chitchat",
+      "math",
+      "code"
+    ],
+    "matrix": [
+      [
+        97,
+        5,
+        4
+      ],
+      [
+        0,
+        103,
+        8
+      ],
+      [
+        1,
+        5,
+        107
+      ]
+    ]
+  },
+  "mean_confidence": 0.9284116154367273,
+  "mean_answer_confidence": 0.9284116154367273,
+  "mean_entropy_confidence": 0.8377941000706253,
+  "mean_score": 1.0873991076316998,
+  "nll": 0.23447053231394574,
+  "ece": 0.03808289423133386,
+  "ece_15bin": 0.03808289423133386,
+  "ece_10bin": 0.03919101194901893,
+  "brier": 0.10704723804194458,
+  "brier_top1": 0.057169449249891854,
+  "expected_index_distribution": {
+    "chitchat": 106,
+    "math": 111,
+    "code": 113
+  },
+  "train_report": {
+    "after": {
+      "items": 330,
+      "loss": 0.2372,
+      "accuracy": 0.9455,
+      "mean_confidence": 0.9535,
+      "ece": 0.0293,
+      "brier": 0.0915,
+      "brier_top1": 0.0438,
+      "by_type": {
+        "score": {
+          "items": 330,
+          "loss": 0.2372,
+          "accuracy": 0.9455,
+          "mean_confidence": 0.9535,
+          "ece": 0.0293,
+          "brier": 0.0915,
+          "brier_top1": 0.0438
+        }
+      }
+    },
+    "before": {
+      "items": 330,
+      "loss": 0.2941,
+      "accuracy": 0.9273,
+      "mean_confidence": 0.8467,
+      "ece": 0.0806,
+      "brier": 0.1394,
+      "brier_top1": 0.0706,
+      "by_type": {
+        "score": {
+          "items": 330,
+          "loss": 0.2941,
+          "accuracy": 0.9273,
+          "mean_confidence": 0.8467,
+          "ece": 0.0806,
+          "brier": 0.1394,
+          "brier_top1": 0.0706
+        }
+      }
+    },
+    "calibration": {
+      "choice": {
+        "items": 0,
+        "temperature": 1.0,
+        "issues": []
+      },
+      "score": {
+        "items": 135,
+        "temperature": 1.1558657884597778,
+        "issues": [],
+        "accuracy": 0.9925925925925926,
+        "mean_confidence": 0.9704826257635528
+      },
+      "noul": {
+        "items": 0,
+        "temperature": 1.0,
+        "issues": []
+      }
+    },
+    "abstention_thresholds": {
+      "score:3-5": 0.5727
+    },
+    "eval_mode": "held_out",
+    "eval_items": 330
+  },
+  "train_report_comparison": {
+    "accuracy": {
+      "oracle": 0.9303030303030303,
+      "reported": 0.9455,
+      "delta": -0.015196969696969709,
+      "rounded4_matches": false
+    },
+    "mean_confidence": {
+      "oracle": 0.9284116154367273,
+      "reported": 0.9535,
+      "delta": -0.02508838456327267,
+      "rounded4_matches": false
+    },
+    "nll_loss": {
+      "oracle": 0.23447053231394574,
+      "reported": 0.2372,
+      "delta": -0.0027294676860542544,
+      "rounded4_matches": false,
+      "note": "definition may differ from the training harness; accuracy/mean_confidence are the gate-relevant values"
+    },
+    "ece_15bin": {
+      "oracle": 0.03808289423133386,
+      "reported": 0.0293,
+      "delta": 0.008782894231333861,
+      "rounded4_matches": false,
+      "note": "definition may differ from the training harness; accuracy/mean_confidence are the gate-relevant values"
+    },
+    "brier": {
+      "oracle": 0.10704723804194458,
+      "reported": 0.0915,
+      "delta": 0.015547238041944578,
+      "rounded4_matches": false,
+      "note": "definition may differ from the training harness; accuracy/mean_confidence are the gate-relevant values"
+    },
+    "brier_top1": {
+      "oracle": 0.057169449249891854,
+      "reported": 0.0438,
+      "delta": 0.013369449249891856,
+      "rounded4_matches": false,
+      "note": "definition may differ from the training harness; accuracy/mean_confidence are the gate-relevant values"
+    }
+  },
+  "sanity": {
+    "spec_golden_sample": {
+      "state": "你好，世界",
+      "head_len": 78,
+      "markers": [
+        13,
+        35,
+        55
+      ],
+      "state_ids": [
+        30485,
+        235607,
+        235365,
+        9979
+      ],
+      "seq_len": 83,
+      "expected_head_len": 78,
+      "expected_markers": [
+        13,
+        35,
+        55
+      ],
+      "expected_state_ids": [
+        30485,
+        235607,
+        235365,
+        9979
+      ],
+      "expected_seq_len": 83,
+      "layout_matches_spec": true,
+      "logits": [
+        5.777190685272217,
+        -4.032849311828613,
+        -1.2201803922653198
+      ],
+      "logits_expected": [
+        5.7771907,
+        -4.0328493,
+        -1.2201804
+      ],
+      "logits_max_abs_diff": 1.4727783437251674e-08,
+      "probabilities": [
+        0.9974514842033386,
+        0.00020556864910759032,
+        0.0023429517168551683
+      ],
+      "probabilities_expected": [
+        0.99745148,
+        0.00020557,
+        0.00234295
+      ],
+      "probabilities_max_abs_diff": 4.2033386771223036e-09,
+      "temperature": 1.1558657884597778,
+      "index": 0,
+      "score": 0.004891472082817927,
+      "confidence": 0.9974514842033386,
+      "confidence_entropy": 0.9831785899705645,
+      "pass": true
+    },
+    "onnx_agent_cross_check": {
+      "checked": 6,
+      "rows": [
+        {
+          "id": "eval:0001",
+          "predicted_index": 2,
+          "official_argmax": 2,
+          "official_round_score": 2,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        },
+        {
+          "id": "eval:0002",
+          "predicted_index": 1,
+          "official_argmax": 1,
+          "official_round_score": 1,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        },
+        {
+          "id": "eval:0003",
+          "predicted_index": 2,
+          "official_argmax": 2,
+          "official_round_score": 2,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        },
+        {
+          "id": "eval:0166",
+          "predicted_index": 1,
+          "official_argmax": 1,
+          "official_round_score": 1,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        },
+        {
+          "id": "eval:0075",
+          "predicted_index": 0,
+          "official_argmax": 0,
+          "official_round_score": 0,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        },
+        {
+          "id": "eval:0040",
+          "predicted_index": 1,
+          "official_argmax": 1,
+          "official_round_score": 1,
+          "max_prob_diff": 0.0,
+          "answer_confidence_diff": 0.0,
+          "entropy_confidence_diff": 0.0,
+          "score_diff": 0.0
+        }
+      ],
+      "max_prob_abs_diff": 0.0,
+      "max_answer_confidence_abs_diff": 0.0,
+      "max_entropy_confidence_abs_diff": 0.0,
+      "max_score_abs_diff": 0.0,
+      "sequences_exact": true,
+      "predicted_index_mismatches": [],
+      "round_score_vs_argmax_mismatches": [],
+      "pass": true
+    },
+    "batch_invariance": {
+      "rows": 8,
+      "padded_to_len": 3,
+      "max_logit_abs_diff": 7.849296569824219,
+      "max_prob_abs_diff": 0.3165695071220398,
+      "within_1e-4": false,
+      "informational_only": true,
+      "note": "The int8 graph has 98 DynamicQuantizeLinear nodes; a per-tensor activation scale is shared across the whole batch, so multi-row batches change every row's logits (verified even for equal-length, unpadded batches). The reference is therefore produced one row per session run; Engine::score_batch output is not expected to match it unless the C++ batch path runs one row at a time."
+    }
+  },
+  "files": {
+    "tokenizer_corpus.jsonl": {
+      "bytes": 696314,
+      "sha256": "78e64ac393f34a894c72749bd7084158def059b0487fbbb90ce4ccbf66c0c3dd",
+      "records": 2083
+    },
+    "eval_reference.jsonl": {
+      "bytes": 815278,
+      "sha256": "75a273897b323d963004dd2e9eee59149237f2b97db8b005f6a249393d68a3c4",
+      "records": 330
+    }
+  },
+  "notes": [
+    "Reference rows are produced one at a time (no padding), matching SPEC section 6 and finetune/verify_onnx.py. Engine::score() must reproduce them directly.",
+    "The int8 model is NOT batch-composition invariant: ORT's DynamicQuantizeLinear uses one activation scale per tensor (98 such nodes), so a multi-row batch shifts every row's logits (reproduced with equal-length, unpadded batches). sanity.batch_invariance records the measured drift; it is informational.",
+    "Any batching implementation (Python ONNXAgent.predict_batch or C++ Engine::score_batch) therefore produces different numbers from these single-row reference rows; a batch path can only match another run with the identical batch layout on the identical ORT build.",
+    "Empty result lists in this report are not failures; see the *_mismatches keys."
+  ]
+}

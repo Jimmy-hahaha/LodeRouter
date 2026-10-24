@@ -114,14 +114,25 @@ foreach(_target LodeRouter config_tool)
     )
 endforeach()
 
-# ───────── Laya judge backend (sibling project: ../laya/cpp, local ONNX judge) ─────────
-set(LAYA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../laya/cpp" CACHE PATH
-    "Directory of the laya C++ project (contains CMakeLists.txt, laya.cpp, laya.h)")
+# ───────── Laya judge backend (local ONNX judge, pure C++ runtime) ─────────
+# The C++ runtime lives in-tree at laya/cpp (next to the exported model
+# artifacts). A sibling checkout at ../laya/cpp is still honoured, so the
+# standalone project can live outside this repository.
+set(LAYA_DIR "" CACHE PATH
+    "Directory of the laya C++ project (contains CMakeLists.txt, laya.cpp, laya.h); auto-detected when empty")
+
+if(LAYA_DIR STREQUAL "")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/laya/cpp/CMakeLists.txt")
+        set(LAYA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/laya/cpp")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../laya/cpp/CMakeLists.txt")
+        set(LAYA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../laya/cpp")
+    endif()
+endif()
 
 if(NOT EXISTS "${LAYA_DIR}/CMakeLists.txt")
     message(FATAL_ERROR
-        "laya project not found at '${LAYA_DIR}'. "
-        "Clone it next to LodeRouter or configure with -DLAYA_DIR=<path to laya/cpp>.")
+        "laya project not found (tried 'laya/cpp' and '../laya/cpp'). "
+        "Restore the in-tree laya/cpp project or configure with -DLAYA_DIR=<path to laya/cpp>.")
 endif()
 
 add_subdirectory("${LAYA_DIR}" "${CMAKE_BINARY_DIR}/laya" EXCLUDE_FROM_ALL)

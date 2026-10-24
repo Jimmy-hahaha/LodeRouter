@@ -30,7 +30,7 @@ cmake .. && cmake --build .
 ./LodeRouter     # 默认监听 127.0.0.1:8080
 ```
 
-依赖 CMake ≥ 3.20、支持 C++20 的编译器、OpenSSL、Threads、onnxruntime；可选 `fmt`（存在时自动启用）与 `mold` 链接器（自动探测，也可用 `-DLODEROUTER_LINKER=` 指定）。裁判模型来自同目录的 laya 项目（默认 `../laya/cpp`，可用 `-DLAYA_DIR=` 指定），构建时会一并编译。
+依赖 CMake ≥ 3.20、支持 C++20 的编译器、OpenSSL、Threads、onnxruntime；可选 `fmt`（存在时自动启用）与 `mold` 链接器（自动探测，也可用 `-DLODEROUTER_LINKER=` 指定）。裁判的纯 C++ 运行时在仓库内 `laya/cpp`（与 `laya/` 里的模型配套），构建时会一并编译；也可用 `-DLAYA_DIR=` 指定外部 laya 项目。
 
 ## 裁判模型
 
@@ -179,6 +179,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 ├── finetune/                       # 三分类数据、微调与 ONNX 导出
 ├── docs/{en,zh-CN}/README.md       # 完整文档
 ├── include/{cpp-httplib,json,spdlog}
+├── laya/                           # 微调后的 ONNX 模型 + laya/cpp 纯 C++ 运行时
 └── src/                            # compress config config_tool download judge judge_laya log main router
 ```
 
