@@ -187,7 +187,7 @@ inline json defaultConfig() {
         {"judge_backend", "laya"},
         {"judge_url", ""},
         {"judge_model_dir", ""},
-        {"judge_auto_download", true},
+        {"judge_auto_download", false},
         {"api_key", ""},
         {"judge_api_key", ""},
         {"model_easy", ""},
@@ -267,14 +267,14 @@ inline std::string backend_url = {};
 inline std::string judge_backend = "laya";
 inline std::string judge_url = {};
 inline std::string judge_model_dir = {};
-inline bool judge_auto_download = true;
+inline bool judge_auto_download = false;
 inline std::string api_key = {};
 inline std::string judge_api_key = {};
 inline std::string model_easy = {};
 inline std::string model_middle = {};
 inline std::string model_hard = {};
 
-// ───────── 难度挡位：三个挡位各自解析出的目标后端（url / model / api_key） ─────────
+// ───────── 任务挡位：三个挡位各自解析出的目标后端（url / model / api_key） ─────────
 enum class Level { Easy = 0, Middle = 1, Hard = 2 };
 
 struct Backend {
@@ -288,11 +288,21 @@ inline Backend backend_easy{};
 inline Backend backend_middle{};
 inline Backend backend_hard{};
 
+// ───────── 挡位名：配置键仍是 easy/middle/hard，语义对应闲聊/数学/代码 ─────────
 inline const char* level_name(Level lv) {
     switch (lv) {
         case Level::Middle: return "middle";
         case Level::Hard:   return "hard";
         default:            return "easy";
+    }
+}
+
+// ───────── 中文显示名：只用于日志与 /v1/models，配置键不受影响 ─────────
+inline const char* level_label(Level lv) {
+    switch (lv) {
+        case Level::Middle: return "数学";
+        case Level::Hard:   return "代码";
+        default:            return "闲聊";
     }
 }
 

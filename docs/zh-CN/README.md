@@ -2,7 +2,7 @@
 
 # LodeRouter 完整文档
 
-以本地 Laya 裁判判断问题难度，自动路由到对应模型，在保证回答质量的同时降低推理成本。
+以本地微调的 Laya 裁判判断请求类别（闲聊 / 数学 / 代码），自动路由到对应模型，在保证回答质量的同时降低推理成本。
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)]()
@@ -17,7 +17,7 @@
 - [裁判模型](#裁判模型)
 - [配置项](#配置项)
 - [运行与使用](#运行与使用)
-- [难度判断的输入](#难度判断的输入)
+- [类别判断的输入](#类别判断的输入)
 - [其他行为](#其他行为)
 - [项目结构](#项目结构)
 
@@ -34,30 +34,28 @@ cmake .. && cmake --build .
 
 ## 裁判模型
 
-不需要任何 API Key，三种方式任选。
+不需要任何 API Key。裁判必须先按本任务的“闲聊 / 数学 / 代码”三分类微调一次；训练好的 **int8** 模型随仓库提交在 `laya/`（约 925 MB，单文件）。
 
-### 自动下载（默认）
+### 微调并导出（默认做法）
 
-首次启动时本地找不到模型，会在后台下载，服务立即可用（期间请求按 `easy` 档处理，下完自动接管）：
+`finetune/` 里有可复现的数据与命令：下载 `convaiinnovations/laya-multilingual` 基础权重，在本机 CPU 上用 1350 条三分类样本微调，再导出 ONNX：
 
-```text
-[info] laya judge: model not found locally, downloading techtheist/laya-onnx/resolve/main/multilingual in the background (about 873 MB, one time only)
-[info] router listening on 127.0.0.1:8080
-[info] model.onnx: 64 MB ...
-[info] laya judge loaded from /home/you/.cache/LodeRouter/laya-onnx-multilingual (downloaded in background)
+```bash
+python3 finetune/build_dataset.py
+# 详见 finetune/README.md：下载权重 → laya-train → export_onnx.py
 ```
 
-| 项目 | 说明 |
-| --- | --- |
-| 模型 | `techtheist/laya-onnx` 的 `multilingual` int8 量化版（873 MB）。官方 `convaiinnovations/laya` 只有 PyTorch 权重、没有 ONNX，这份社区导出的输入输出名（`logits` + `act_logits`）与 laya C++ 端一致 |
-| 下载站 | 默认 `hf-mirror.com`（国内可直连），不通回退 `huggingface.co`；`HF_ENDPOINT` 可指定唯一站点 |
-| 断点续传 | 按 32 MB 切段，失败自动重试并从 `.part` 继续（镜像会限速甚至掐断，实测 1~2 MB/s，整份约 10 分钟） |
-| 缓存位置 | Linux `~/.cache/LodeRouter/laya-onnx-multilingual`、macOS `~/Library/Caches/LodeRouter/…`、Windows `%LOCALAPPDATA%\LodeRouter\Cache\…` |
-| 关闭下载 | 配置写 `"judge_auto_download": false`，或设 `LODE_JUDGE_AUTO_DOWNLOAD=0` |
+导出目录包含 `model.onnx` 与 `tokenizer.json`，默认放在仓库根 `laya/`（构建时自动探测），也可以写：
 
-### 手动下载
+```json
+{ "judge_model_dir": "/home/you/laya" }
+```
 
-把 `model.onnx` 与 `tokenizer.json` 放进同一目录即可：
+（环境变量 `LODE_JUDGE_MODEL_DIR` 优先级更高。）找不到微调模型时请求按 `easy`（闲聊）处理并写日志。
+
+### 原版 laya（不推荐）
+
+`techtheist/laya-onnx` 的 `multilingual` 是原版难度模型（873 MB），只分 trivial/easy/moderate/hard，不区分闲聊和代码。自动下载默认关闭；需要临时调试时手动取一份：
 
 ```bash
 BASE=https://hf-mirror.com/techtheist/laya-onnx/resolve/main/multilingual
@@ -65,7 +63,7 @@ curl -L -o tokenizer.json "$BASE/tokenizer.json"
 curl -L -C - -o model.onnx "$BASE/model_int8.onnx"   # 873 MB，-C - 断了可续传
 ```
 
-再写 `"judge_model_dir": "/home/you/laya-onnx"`（也可用环境变量 `LODE_JUDGE_MODEL_DIR`）。
+再设 `"judge_model_dir"` 指向该目录；或把 `"judge_auto_download"` 设为 `true`，让它下载到缓存目录（Linux `~/.cache/LodeRouter/laya-onnx-multilingual`）。原版会把数学和代码误判成难度挡位，仅用于调试。
 
 ### 自己的模型
 
@@ -112,7 +110,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 | `judge_url` | 空 | `judge_backend` 为 `http` 时的裁判服务地址 |
 | `judge_api_key` | 空 | 裁判服务的 API Key（仅 `http` 后端使用） |
 | `judge_model_dir` | 空 | laya 模型目录（需含 `model.onnx` 与 `tokenizer.json`）。留空时按「构建时记录的路径 → 可执行文件所在目录 → 当前工作目录 → 下载缓存」探测；显式配置但无效会直接报错，不回退 |
-| `judge_auto_download` | `true` | 本地没有 laya 模型时是否自动下载 |
+| `judge_auto_download` | `false` | 本地没有微调模型时是否自动下载**原版** laya（只分难度，不分工况；仅用于调试） |
 | `backends.<level>` | 空 | 按挡位指定 `url` / `model` / `api_key`，省掉的字段继承上面的默认值 |
 
 ### 三档指向不同服务
@@ -145,12 +143,12 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 
 | 行为 | 说明 |
 | --- | --- |
-| 模型替换 | 请求里的 `model` 会被换成判定挡位的模型名；没有 `messages` 时按 `easy` 档处理，并保留客户端给的 `model` |
-| `GET /v1/models` | 返回 `auto` 与三个挡位各自的模型名（`owned_by` 标出挡位） |
+| 模型替换 | 请求里的 `model` 会被换成判定类别的模型名；没有 `messages` 时按 `easy`（闲聊）处理，并保留客户端给的 `model` |
+| `GET /v1/models` | 返回 `auto` 与三个挡位各自的模型名（`owned_by` 标出挡位：`闲聊-backend` / `数学-backend` / `代码-backend`） |
 | 响应方式 | 上游响应始终以 SSE（`text/event-stream`）透传，客户端需要开启流式接收 |
-| 日志 | 每次判定都记录：`middle -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |
+| 日志 | 每次判定都记录：`数学(middle) -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |
 
-## 难度判断的输入
+## 类别判断的输入
 
 裁判看到的不是最后一句用户消息，而是整段对话压缩出来的**结构化概要**：
 
@@ -161,7 +159,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 [约束] 必须保持 ABI 兼容，不能升级依赖
 ```
 
-按 `[任务] > [报错] > [约束] > [失败] > [起点] > [上文]` 的优先级在预算内裁剪，同一句话不会重复占位；预算 256 token（laya 的 `state` 槽可用 445 token，实测 20 轮长会话也只压到 207）。所以同一句「hi」，单轮判 `easy`，带「失败重试 3 次 + 报错」上下文则判 `middle`。
+按 `[任务] > [报错] > [约束] > [失败] > [起点] > [上文]` 的优先级在预算内裁剪，同一句话不会重复占位；预算 256 token（laya 的 `state` 槽可用 445 token，实测 20 轮长会话也只压到 207）。所以同一句「hi」，单轮判「闲聊」（`easy`），带「失败重试 3 次 + 报错」上下文则判「代码」（`hard`）。
 
 ## 其他行为
 
@@ -169,7 +167,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 | --- | --- |
 | 配置查找顺序 | `MYAPP_CONFIG` → 用户配置目录 → 可执行文件所在目录 → 当前工作目录（仓库内 `config/config.json` 是模板） |
 | 日志 | 写当前目录的 `router.log` 并打印到终端；`LODE_LOG_CONSOLE=0` 只写文件 |
-| 启动探测 | 按 url 逐档探测后端，打印 `easy/middle/hard backend is found: <url> -> <model>` |
+| 启动探测 | 按 url 逐档探测后端，打印 `闲聊(easy)/数学(middle)/代码(hard) backend is found: <url> -> <model>` |
 | 缺配置 | 某档缺 `url` / `model` 只打日志，请求真落到该档才返回 `502` |
 | 失败处理 | 裁判或后端探测失败都只告警，只有地址与监听地址重合时才退出 |
 
@@ -178,6 +176,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 ```text
 ├── CMakeLists.txt
 ├── config/config.json              # 配置模板
+├── finetune/                       # 三分类数据、微调与 ONNX 导出
 ├── docs/{en,zh-CN}/README.md       # 完整文档
 ├── include/{cpp-httplib,json,spdlog}
 └── src/                            # compress config config_tool download judge judge_laya log main router

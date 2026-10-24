@@ -58,14 +58,15 @@ int main() {
     config["judge_model_dir"] = ask("judge_model_dir (empty = auto-detect)");
     config["api_key"] = ask_hidden("api_key");
     config["judge_api_key"] = ask_hidden("judge_api_key");
-    config["model_easy"] = ask("model_easy");
-    config["model_middle"] = ask("model_middle");
-    config["model_hard"] = ask("model_hard");
+    config["model_easy"] = ask("model_easy (闲聊)");
+    config["model_middle"] = ask("model_middle (数学)");
+    config["model_hard"] = ask("model_hard (代码)");
 
     // ───────── 挡位配置：三个挡位可各自指定 url / model / api_key，留空即沿用上面的默认值 ─────────
     std::cout << "\n每个挡位可以单独指定 url/model/api_key，留空即沿用上面的默认值。\n";
     for (const char* lv : {"easy", "middle", "hard"}) {
-        std::cout << "-- " << lv << " --\n";
+        const char* label = lv[0] == 'e' ? "闲聊" : (lv[0] == 'm' ? "数学" : "代码");
+        std::cout << "-- " << lv << " (" << label << ") --\n";
         std::string url = ask(std::string("backends.") + lv + ".url");
         std::string model = ask(std::string("backends.") + lv + ".model");
         std::string key = ask_hidden(std::string("backends.") + lv + ".api_key");

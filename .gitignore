@@ -4,6 +4,8 @@ build/
 *.swp
 *~
 *.log
+__pycache__/
+*.pyc
 my_scripts/
 .scratch/
 .cache/

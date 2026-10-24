@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(LodeRouter
     VERSION 1.0.0
-    DESCRIPTION "A difficulty-aware LLM model router"
+    DESCRIPTION "A category-aware LLM model router"
     LANGUAGES CXX
 )
 
@@ -127,7 +127,7 @@ endif()
 add_subdirectory("${LAYA_DIR}" "${CMAKE_BINARY_DIR}/laya" EXCLUDE_FROM_ALL)
 
 # ───────── Build-time default for the laya model dir (auto-detection fallback) ─────────
-set(LAYA_MODEL_DIR "${LAYA_DIR}/../laya-zh-onnx-int8" CACHE PATH
+set(LAYA_MODEL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/laya" CACHE PATH
     "laya ONNX model directory used as the build-time default for auto-detection")
 get_filename_component(LAYA_MODEL_DIR "${LAYA_MODEL_DIR}" ABSOLUTE)
 

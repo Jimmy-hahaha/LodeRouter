@@ -2,16 +2,18 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "../include/cpp-httplib/httplib.h"
 #include "../include/json/json.hpp"
+#include <algorithm>
+#include <cctype>
 #include "config.h"
 #include "judge_laya.h"
 #include "log.h"
 using json = nlohmann::json;
 
-// ───────── http 裁判：调 judge_url 上的 OpenAI 兼容接口，按回复里的词判挡位 ─────────
+// ───────── http 裁判：调 judge_url 上的 OpenAI 兼容接口，按回复里的词判类别 ─────────
 inline Level ask_judge_http(const std::string& input) {
     json req = {
         {"messages", {
-            {{"role", "user"}, {"content", "给下面的问题做难度评级，只回答一个词：easy(闲聊)、middle(大多数问题)、hard(极复杂推理，高难度编程)。\n问题：" + input}}
+            {{"role", "user"}, {"content", "给下面的请求分类，只回答一个词：chitchat(闲聊)、math(数学)、code(代码)。\n请求：" + input}}
         }},
         {"max_tokens", 5}
     };
@@ -26,8 +28,10 @@ inline Level ask_judge_http(const std::string& input) {
     try {
         auto resp = json::parse(res->body);
         std::string result = resp["choices"][0]["message"]["content"];
-        if (result.find("hard") != std::string::npos) return Level::Hard;
-        if (result.find("middle") != std::string::npos) return Level::Middle;
+        std::transform(result.begin(), result.end(), result.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (result.find("code") != std::string::npos) return Level::Hard;
+        if (result.find("math") != std::string::npos) return Level::Middle;
     } catch (const std::exception& e) {
         log_error(e.what());
     }

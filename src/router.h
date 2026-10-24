@@ -12,7 +12,7 @@
 #include "log.h"
 using json = nlohmann::json;
 
-// ───────── 路由服务：按难度挡位把 /v1/chat/completions 转发到对应后端 ─────────
+// ───────── 路由服务：按类别挡位把 /v1/chat/completions 转发到对应后端 ─────────
 
 // ───────── 后端鉴权：每个挡位用自己的 api_key，客户端凭据一律不透传 ─────────
 inline void add_backend_auth(httplib::Headers& headers, const std::string& key) {
@@ -103,10 +103,12 @@ inline int run_router() {
     for (const auto& [lv, b] : distinct_backends()) {
         if (b->url.empty()) continue;
         if (auto p = probe_models(b->url); !p.ok)
-            log_error(std::string(level_name(lv)) + " backend not found: " + p.detail +
+            log_error(std::string(level_label(lv)) + "(" + level_name(lv) +
+                      ") backend not found: " + p.detail +
                       " (check backend_url / backends.*.url in config.json)");
         else
-            log_info(std::string(level_name(lv)) + " backend is found: " + b->url +
+            log_info(std::string(level_label(lv)) + "(" + level_name(lv) +
+                     ") backend is found: " + b->url +
                      " -> " + (b->model.empty() ? "(no model)" : b->model));
     }
     if (judge_backend == "http") {
@@ -149,7 +151,7 @@ inline int run_router() {
             }
             if (!dup) {
                 resp["data"].push_back({{"id", b.model}, {"object", "model"}, {"created", 0},
-                                        {"owned_by", std::string(level_name(lv)) + "-backend"}});
+                                        {"owned_by", std::string(level_label(lv)) + "-backend"}});
             }
         }
         res.set_content(resp.dump(), "application/json");
@@ -167,7 +169,7 @@ inline int run_router() {
                     Level lv = ask_judge(ctx.text);
                     target = &backend_for(lv);
                     reqj["model"] = target->model;
-                    log_info(std::string(level_name(lv)) + " -> " +
+                    log_info(std::string(level_label(lv)) + "(" + level_name(lv) + ") -> " +
                              (target->model.empty() ? "(no model)" : target->model) +
                              " @ " + target->url + " (ctx " +
                              std::to_string(ctx.tokens) + " tok / " +

@@ -5,7 +5,7 @@
     "judge_backend": "laya",
     "judge_url": "",
     "judge_model_dir": "",
-    "judge_auto_download": true,
+    "judge_auto_download": false,
     "api_key": "",
     "judge_api_key": "",
     "model_easy": "",

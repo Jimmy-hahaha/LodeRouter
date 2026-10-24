@@ -2,7 +2,7 @@
 
 # LodeRouter — Full Documentation
 
-Judges question difficulty locally with Laya and routes each request to the matching model, keeping answer quality high while cutting inference cost.
+Judges each request's category locally with a fine-tuned Laya model (chitchat / math / code) and routes it to the matching model, keeping answer quality high while cutting inference cost.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../../LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)]()
@@ -34,30 +34,28 @@ Requires CMake ≥ 3.20, a C++20 compiler, OpenSSL, Threads and onnxruntime; opt
 
 ## The judge model
 
-No API key is needed. Pick one of three ways.
+No API key is needed. The judge must first be fine-tuned for this task's three classes (chitchat / math / code); the repository does not ship ONNX weights.
 
-### Automatic download (default)
+### Fine-tune and export (default)
 
-On the first run, if no model is found locally it is downloaded in the background while the service serves immediately (requests fall back to the `easy` level until it is ready):
+`finetune/` holds the reproducible data and commands: download the `convaiinnovations/laya-multilingual` base weights, fine-tune on 1,350 three-class samples on CPU, then export ONNX:
 
-```text
-[info] laya judge: model not found locally, downloading techtheist/laya-onnx/resolve/main/multilingual in the background (about 873 MB, one time only)
-[info] router listening on 127.0.0.1:8080
-[info] model.onnx: 64 MB ...
-[info] laya judge loaded from /home/you/.cache/LodeRouter/laya-onnx-multilingual (downloaded in background)
+```bash
+python3 finetune/build_dataset.py
+# see finetune/README.md: download weights → laya-train → export_onnx.py
 ```
 
-| Item | Details |
-| --- | --- |
-| Model | The `multilingual` int8 quantization from `techtheist/laya-onnx` (873 MB). Upstream `convaiinnovations/laya` ships PyTorch weights only and no ONNX; this community export uses the I/O names (`logits` + `act_logits`) the laya C++ runtime expects |
-| Mirrors | `hf-mirror.com` by default, falling back to `huggingface.co`; set `HF_ENDPOINT` to pin a single site |
-| Resume | Transfers are split into 32 MB segments, retried on failure and resumed from the existing `.part` (mirrors throttle or drop long connections; measured 1–2 MB/s, so the whole file takes about 10 minutes) |
-| Cache | Linux `~/.cache/LodeRouter/laya-onnx-multilingual`, macOS `~/Library/Caches/LodeRouter/…`, Windows `%LOCALAPPDATA%\LodeRouter\Cache\…` |
-| Opt out | `"judge_auto_download": false` in the config, or `LODE_JUDGE_AUTO_DOWNLOAD=0` |
+The export directory holds `model.onnx` and `tokenizer.json`; the trained **int8** model is committed at the repository root in `laya/` (about 925 MB, single file), which auto-detection picks up, or point at it explicitly:
 
-### Manual download
+```json
+{ "judge_model_dir": "/home/you/laya" }
+```
 
-Put `model.onnx` and `tokenizer.json` in the same directory:
+(The `LODE_JUDGE_MODEL_DIR` environment variable takes precedence.) If the fine-tuned model is missing, requests fall back to `easy` (chitchat) and a log line is written.
+
+### Original laya (not recommended)
+
+`techtheist/laya-onnx`'s `multilingual` is the original difficulty model (873 MB): trivial/easy/moderate/hard, with no chitchat-vs-code split. Auto-download is off by default; for debugging, fetch it manually:
 
 ```bash
 BASE=https://hf-mirror.com/techtheist/laya-onnx/resolve/main/multilingual
@@ -65,7 +63,7 @@ curl -L -o tokenizer.json "$BASE/tokenizer.json"
 curl -L -C - -o model.onnx "$BASE/model_int8.onnx"   # 873 MB; -C - resumes
 ```
 
-Then set `"judge_model_dir": "/home/you/laya-onnx"` (or the `LODE_JUDGE_MODEL_DIR` environment variable).
+Then set `"judge_model_dir"` to that directory, or set `"judge_auto_download": true` to fetch it into the cache (Linux `~/.cache/LodeRouter/laya-onnx-multilingual`). The original model misclassifies math and code as difficulty levels; debugging only.
 
 ### Bring your own model
 
@@ -87,7 +85,7 @@ Generate it with `config_tool`, or write `~/.config/LodeRouter/config.json` by h
   "judge_backend": "laya",
   "judge_url": "",
   "judge_model_dir": "",
-  "judge_auto_download": true,
+  "judge_auto_download": false,
   "api_key": "",
   "judge_api_key": "",
   "model_easy": "",
@@ -111,8 +109,8 @@ Generate it with `config_tool`, or write `~/.config/LodeRouter/config.json` by h
 | `judge_backend` | `laya` | `laya` (local ONNX model) or `http` (the OpenAI-compatible service at `judge_url`) |
 | `judge_url` | empty | Judge service address when `judge_backend` is `http` |
 | `judge_api_key` | empty | API key for the judge service (only used by the `http` backend) |
-| `judge_model_dir` | empty | laya model directory (needs `model.onnx` + `tokenizer.json`). When empty, candidates are probed in order: the path recorded at build time → the executable's directory → the current working directory → the download cache; an explicitly configured but invalid directory is an error, with no fallback |
-| `judge_auto_download` | `true` | Whether to download the laya model when it is missing locally |
+| `judge_model_dir` | empty | laya model directory (needs `model.onnx` + `tokenizer.json`). When empty, candidates are probed in order: the path recorded at build time (`laya/` in the repository) → the executable's directory → the current working directory (including `.cache/laya-ft/laya`); an explicitly configured but invalid directory is an error, with no fallback |
+| `judge_auto_download` | `false` | Whether to auto-download the **original** laya model when the fine-tuned one is missing (difficulty levels only; debugging only) |
 | `backends.<level>` | empty | Per-level `url` / `model` / `api_key`; omitted fields inherit the defaults above |
 
 ### Per-level backends
@@ -145,10 +143,10 @@ Every level's service must speak an **OpenAI-compatible API** (`/v1/chat/complet
 
 | Behaviour | Details |
 | --- | --- |
-| Model replacement | The request's `model` is replaced with the model of the chosen level; a request without `messages` falls back to `easy` and keeps the client's `model` |
-| `GET /v1/models` | Returns `auto` plus each level's model name (`owned_by` marks the level) |
+| Model replacement | The request's `model` is replaced with the model of the chosen class; a request without `messages` falls back to `easy` (chitchat) and keeps the client's `model` |
+| `GET /v1/models` | Returns `auto` plus each class's model name (`owned_by` marks the class: `闲聊-backend` / `数学-backend` / `代码-backend`) |
 | Response style | Upstream responses are always relayed as SSE (`text/event-stream`), so enable streaming on the client |
-| Logging | Every decision is logged: `middle -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |
+| Logging | Every decision is logged: `数学(middle) -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |
 
 ## What the judge receives
 
@@ -161,7 +159,7 @@ The judge does not see the last user message alone but a **structured summary** 
 [约束] 必须保持 ABI 兼容，不能升级依赖
 ```
 
-Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > [起点] > [上文]` within a 256-token budget (laya's `state` slot has 445 tokens available; a 20-turn conversation measured 207 in practice). So the same `hi` is `easy` in a single-turn chat but `middle` when the context carries "retried 3 times + error".
+Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > [起点] > [上文]` within a 256-token budget (laya's `state` slot has 445 tokens available; a 20-turn conversation measured 207 in practice). So the same `hi` is 「闲聊」(`easy`) in a single-turn chat but 「代码」(`hard`) when the context carries "retried 3 times + error".
 
 ## Other behaviour
 
@@ -169,7 +167,7 @@ Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > 
 | --- | --- |
 | Config lookup order | `MYAPP_CONFIG` → user config directory → the executable's directory → the current working directory (the in-repo `config/config.json` is a template) |
 | Logging | Writes `router.log` in the current directory and prints to the terminal; `LODE_LOG_CONSOLE=0` writes the file only |
-| Startup probe | Every level's backend is probed by url and logged as `easy/middle/hard backend is found: <url> -> <model>` |
+| Startup probe | Every class's backend is probed by url and logged as `闲聊(easy)/数学(middle)/代码(hard) backend is found: <url> -> <model>` |
 | Missing config | A level missing `url` / `model` is only logged; a request actually landing on it returns `502` |
 | Failure handling | A judge that fails to load or an unreachable backend is a warning — only an address colliding with the listen address aborts startup |
 
@@ -178,6 +176,7 @@ Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > 
 ```text
 ├── CMakeLists.txt
 ├── config/config.json              # config template
+├── finetune/                       # three-class data, fine-tuning and ONNX export
 ├── docs/{en,zh-CN}/README.md       # full documentation
 ├── include/{cpp-httplib,json,spdlog}
 └── src/                            # compress config config_tool download judge judge_laya log main router

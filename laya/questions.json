@@ -1,0 +1,11 @@
+{
+  "category": {
+    "type": "score",
+    "instructions": "Which category does this request belong to?",
+    "criteria": [
+      "chitchat: casual conversation, greetings, small talk, jokes, feelings, opinions",
+      "math: mathematics, arithmetic, algebra, geometry, calculus, probability, proofs",
+      "code: programming, debugging, refactoring, software design, APIs, databases, tooling"
+    ]
+  }
+}

@@ -13,27 +13,28 @@
 #include "download.h"
 #include "log.h"
 
-// ───────── laya 裁判：用本地 ONNX 模型打分，把输入判成 easy / middle / hard ─────────
+// ───────── laya 裁判：用微调后的 ONNX 模型把输入判成 闲聊 / 数学 / 代码 ─────────
 namespace lode_judge_laya {
 
 // ───────── 引擎与互斥量：引擎串行推理，后台热加载与请求共用一把锁 ─────────
 inline std::unique_ptr<laya::Engine> engine;
 inline std::mutex engine_mutex;
 
-// ───────── 难度问法：laya 官方 router preset 的 4 档问法，映射到 3 档 ─────────
+// ───────── 三分类问法：必须与 finetune/data 训练时的 instruction/levels 逐字一致 ─────────
 inline const std::vector<std::string>& levels() {
     static const std::vector<std::string> lv = {
-        "trivial: a lookup or one-liner",
-        "easy: short answer, no reasoning",
-        "moderate: several steps",
-        "hard: long multi-step reasoning or specialist knowledge",
+        "chitchat: casual conversation, greetings, small talk, jokes, feelings, opinions",
+        "math: mathematics, arithmetic, algebra, geometry, calculus, probability, proofs",
+        "code: programming, debugging, refactoring, software design, APIs, databases, tooling",
     };
     return lv;
 }
 
-inline constexpr const char* instruction = "How hard is `request` for a language model?";
+inline constexpr const char* instruction = "Which category does this request belong to?";
 
-// ───────── 目录探测：构建时路径 → 可执行文件旁 → 工作目录，认 model.onnx + tokenizer.json ─────────
+// ───────── 目录探测：微调模型名固定，构建时路径 → 可执行文件旁 → 工作目录 ─────────
+inline constexpr const char* kModelDirName = "laya";
+
 inline bool looks_like_model_dir(const fs::path& dir) {
     std::error_code ec;
     return fs::is_regular_file(dir / "model.onnx", ec) &&
@@ -54,14 +55,15 @@ inline fs::path auto_detect_model_dir() {
 #endif
     fs::path exe_dir = cfg::getExecutablePath().parent_path();
     if (!exe_dir.empty()) {
-        candidates.push_back(exe_dir / "laya-zh-onnx-int8");
-        candidates.push_back(exe_dir / ".." / "laya" / "laya-zh-onnx-int8");
+        candidates.push_back(exe_dir / kModelDirName);
+        candidates.push_back(exe_dir / ".." / "laya" / kModelDirName);
     }
     std::error_code ec;
     fs::path cwd = fs::current_path(ec);
     if (!ec) {
-        candidates.push_back(cwd / "laya-zh-onnx-int8");
-        candidates.push_back(cwd / ".." / "laya" / "laya-zh-onnx-int8");
+        candidates.push_back(cwd / kModelDirName);
+        candidates.push_back(cwd / ".." / "laya" / kModelDirName);
+        candidates.push_back(cwd / ".cache" / "laya-ft" / kModelDirName);
     }
 
     for (const auto& c : candidates) {
@@ -71,7 +73,7 @@ inline fs::path auto_detect_model_dir() {
     return {};
 }
 
-// ───────── 自动下载：本地无模型时从 HuggingFace 镜像取一份（约 873 MB，仅首次） ─────────
+// ───────── 自动下载（默认关闭）：开启后取的是基础 laya 模型，不是三分类微调模型 ─────────
 inline constexpr const char* kHfRepo = "techtheist/laya-onnx/resolve/main/multilingual";
 
 inline fs::path downloaded_model_dir() {
@@ -88,6 +90,8 @@ inline bool auto_download_allowed() {
 }
 
 inline bool download_laya_model() {
+    log_warn("laya judge: auto download fetches the BASE laya model (difficulty levels), "
+             "not the fine-tuned chitchat/math/code model; prefer judge_model_dir");
     const std::string prefix = kHfRepo;
     const fs::path dir = downloaded_model_dir();
     const std::vector<std::pair<std::string, fs::path>> files = {
@@ -138,8 +142,7 @@ inline fs::path resolve_model_dir() {
     fs::path p = auto_detect_model_dir();
     if (!p.empty()) return p;
 
-    fs::path cache = downloaded_model_dir();
-    if (looks_like_model_dir(cache)) return cache;
+    // 不探测基础 laya 模型缓存：它有难度分档，没有三分类微调。
     return {};
 }
 
@@ -190,14 +193,14 @@ inline bool init_laya_judge() {
     return true;
 }
 
-// ───────── 判定入口：调 score 头取挡位，失败一律回退 easy ─────────
+// ───────── 判定入口：调 score 头取类别，失败一律回退闲聊（easy） ─────────
 inline Level ask_judge_laya(const std::string& input) {
     std::lock_guard<std::mutex> lock(engine_mutex);
     if (!engine) {
         static std::atomic<bool> warned{false};
         if (!warned.exchange(true)) {
-            log_warn("laya judge: engine not ready yet (model still downloading?) - "
-                     "falling back to easy until it is");
+            log_warn("laya judge: engine not ready yet (fine-tuned model missing?) - "
+                     "falling back to 闲聊 (easy) until it is");
         }
         return Level::Easy;
     }
@@ -205,11 +208,12 @@ inline Level ask_judge_laya(const std::string& input) {
         auto ans = engine->score(input, instruction, levels());
         Level lv = Level::Easy;
         switch (ans.index) {
-            case 2: lv = Level::Middle; break;
-            case 3: lv = Level::Hard; break;
-            default: lv = Level::Easy; break;
+            case 1: lv = Level::Middle; break;   // math
+            case 2: lv = Level::Hard;   break;   // code
+            default: lv = Level::Easy;  break;   // chitchat
         }
-        log_info(ans.label + " (" + std::to_string(ans.confidence) + ") -> " + level_name(lv));
+        log_info(std::string(level_label(lv)) + " [" + ans.label + "] (" +
+                 std::to_string(ans.confidence) + ") -> " + level_name(lv));
         return lv;
     } catch (const std::exception& e) {
         log_error("laya judge: " + std::string(e.what()));
