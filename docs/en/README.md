@@ -111,6 +111,7 @@ Generate it with `config_tool`, or write `~/.config/LodeRouter/config.json` by h
 | `judge_api_key` | empty | API key for the judge service (only used by the `http` backend) |
 | `judge_model_dir` | empty | laya model directory (needs `model.onnx` + `tokenizer.json`). When empty, candidates are probed in order: the path recorded at build time (`laya/` in the repository) → the executable's directory → the current working directory (including `.cache/laya-ft/laya`); an explicitly configured but invalid directory is an error, with no fallback |
 | `judge_auto_download` | `false` | Whether to auto-download the **original** laya model when the fine-tuned one is missing (difficulty levels only; debugging only) |
+| `sticky_routing` | `true` | Session stickiness switch. `true`: a conversation only moves up, so the model never bounces back and forth and the backend's prefix cache keeps hitting; `false`: the original behaviour — re-judge every turn from the summary |
 | `backends.<level>` | empty | Per-level `url` / `model` / `api_key`; omitted fields inherit the defaults above |
 
 ### Per-level backends
@@ -144,6 +145,8 @@ Every level's service must speak an **OpenAI-compatible API** (`/v1/chat/complet
 | Behaviour | Details |
 | --- | --- |
 | Model replacement | The request's `model` is replaced with the model of the chosen class; a request without `messages` falls back to `easy` (chitchat) and keeps the client's `model` |
+| Sticky sessions | With `sticky_routing: true`, one conversation (identified by the system message plus the first user message) only moves **up**: once it reaches a higher class it stays there. A short "thanks" can no longer bounce it back to the small model and then up again, which used to invalidate the backend's prefix cache every other turn. Set it to `false` for the original behaviour |
+| Cache passthrough | The request body is forwarded as-is except for `model`; cache-related fields such as `cache_prompt`, `chat_template_kwargs` and `stream_options` are all preserved |
 | `GET /v1/models` | Returns `auto` plus each class's model name (`owned_by` marks the class: `闲聊-backend` / `数学-backend` / `代码-backend`) |
 | Response style | Upstream responses are always relayed as SSE (`text/event-stream`), so enable streaming on the client |
 | Logging | Every decision is logged: `数学(middle) -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |

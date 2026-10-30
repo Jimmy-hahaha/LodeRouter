@@ -188,6 +188,7 @@ inline json defaultConfig() {
         {"judge_url", ""},
         {"judge_model_dir", ""},
         {"judge_auto_download", false},
+        {"sticky_routing", true},
         {"api_key", ""},
         {"judge_api_key", ""},
         {"model_easy", ""},
@@ -268,6 +269,8 @@ inline std::string judge_backend = "laya";
 inline std::string judge_url = {};
 inline std::string judge_model_dir = {};
 inline bool judge_auto_download = false;
+// true：同一会话只升不降（保前缀缓存）；false：每轮按概要重新判档（原逻辑）
+inline bool sticky_routing = true;
 inline std::string api_key = {};
 inline std::string judge_api_key = {};
 inline std::string model_easy = {};
@@ -348,6 +351,9 @@ inline void init_config() {
         judge_model_dir = get_str(j, "judge_model_dir");
         if (j.contains("judge_auto_download") && j["judge_auto_download"].is_boolean()) {
             judge_auto_download = j["judge_auto_download"].get<bool>();
+        }
+        if (j.contains("sticky_routing") && j["sticky_routing"].is_boolean()) {
+            sticky_routing = j["sticky_routing"].get<bool>();
         }
         api_key = get_str(j, "api_key");
         judge_api_key = get_str(j, "judge_api_key");

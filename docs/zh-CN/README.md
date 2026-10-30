@@ -111,6 +111,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 | `judge_api_key` | 空 | 裁判服务的 API Key（仅 `http` 后端使用） |
 | `judge_model_dir` | 空 | laya 模型目录（需含 `model.onnx` 与 `tokenizer.json`）。留空时按「构建时记录的路径 → 可执行文件所在目录 → 当前工作目录 → 下载缓存」探测；显式配置但无效会直接报错，不回退 |
 | `judge_auto_download` | `false` | 本地没有微调模型时是否自动下载**原版** laya（只分难度，不分工况；仅用于调试） |
+| `sticky_routing` | `true` | 会话粘性开关。`true`：同一会话只升不降，模型不来回换，后端前缀缓存能连续命中；`false`：恢复原逻辑，每轮都按概要重新判档 |
 | `backends.<level>` | 空 | 按挡位指定 `url` / `model` / `api_key`，省掉的字段继承上面的默认值 |
 
 ### 三档指向不同服务
@@ -144,6 +145,8 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 | 行为 | 说明 |
 | --- | --- |
 | 模型替换 | 请求里的 `model` 会被换成判定类别的模型名；没有 `messages` 时按 `easy`（闲聊）处理，并保留客户端给的 `model` |
+| 会话粘性 | `sticky_routing: true` 时，同一段对话（按 system + 第一条 user 消息识别）**只升不降**：一旦升到更高挡位就留在那里，避免「谢谢」这类短句把会话打回小模型、下一轮再切回来，让后端的前缀缓存反复作废；设成 `false` 则恢复原逻辑 |
+| 缓存透传 | 请求体原样转发，只改写 `model`；`cache_prompt`、`chat_template_kwargs`、`stream_options` 等缓存相关字段都会透传，不会被丢掉 |
 | `GET /v1/models` | 返回 `auto` 与三个挡位各自的模型名（`owned_by` 标出挡位：`闲聊-backend` / `数学-backend` / `代码-backend`） |
 | 响应方式 | 上游响应始终以 SSE（`text/event-stream`）透传，客户端需要开启流式接收 |
 | 日志 | 每次判定都记录：`数学(middle) -> cloud-mid @ http://127.0.0.1:8095 (ctx 59 tok / 3 turn / 3 err)` |

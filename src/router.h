@@ -3,7 +3,9 @@
 #include "../include/cpp-httplib/httplib.h"
 #include "../include/json/json.hpp"
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 #include "compress.h"
@@ -75,6 +77,45 @@ inline std::vector<std::pair<Level, const Backend*>> distinct_backends() {
         if (!seen) out.push_back({lv, &b});
     }
     return out;
+}
+
+// ───────── 会话粘性：同一段对话留在同一个挡位，避免换模型把后端前缀缓存打散 ─────────
+inline std::mutex sticky_mutex;
+inline std::unordered_map<size_t, Level> sticky_levels;
+constexpr size_t kStickyLimit = 512;
+
+// 会话指纹：system 到第一条 user 为止，整段会话里这段前缀不变
+inline size_t conversation_key(const json& messages) {
+    std::string anchor;
+    for (const auto& m : messages) {
+        if (!m.is_object()) continue;
+        const std::string role = m.value("role", "");
+        anchor += role;
+        anchor += '\x1f';
+        if (m.contains("content")) anchor += m["content"].dump();
+        anchor += '\n';
+        if (role == "user") break;
+    }
+    return std::hash<std::string>{}(anchor);
+}
+
+// 只升不降：判到更低的挡位时沿用上次的，闲聊/致谢不会把会话打回小模型
+inline Level sticky_level(size_t key, Level judged, bool& kept) {
+    std::lock_guard<std::mutex> lock(sticky_mutex);
+    if (sticky_levels.size() > kStickyLimit) sticky_levels.clear();
+    auto it = sticky_levels.find(key);
+    if (it == sticky_levels.end()) {
+        sticky_levels.emplace(key, judged);
+        kept = false;
+        return judged;
+    }
+    if (static_cast<int>(it->second) > static_cast<int>(judged)) {
+        kept = true;
+        return it->second;
+    }
+    it->second = judged;
+    kept = false;
+    return judged;
 }
 
 inline int run_router() {
@@ -166,15 +207,21 @@ inline int run_router() {
             if (reqj.contains("messages")) {
                 lode_ctx::Summary ctx = lode_ctx::summarize(reqj["messages"]);
                 if (!ctx.text.empty()) {
-                    Level lv = ask_judge(ctx.text);
+                    const Level judged = ask_judge(ctx.text);
+                    bool kept = false;
+                    const Level lv = sticky_routing
+                                         ? sticky_level(conversation_key(reqj["messages"]), judged, kept)
+                                         : judged;
                     target = &backend_for(lv);
                     reqj["model"] = target->model;
-                    log_info(std::string(level_label(lv)) + "(" + level_name(lv) + ") -> " +
+                    std::string line = std::string(level_label(lv)) + "(" + level_name(lv) + ") -> " +
                              (target->model.empty() ? "(no model)" : target->model) +
                              " @ " + target->url + " (ctx " +
                              std::to_string(ctx.tokens) + " tok / " +
                              std::to_string(ctx.turns) + " turn / " +
-                             std::to_string(ctx.error_patches) + " err)");
+                             std::to_string(ctx.error_patches) + " err)";
+                    if (kept) line += std::string(" [sticky, judge: ") + level_name(judged) + "]";
+                    log_info(line);
                 }
             }
             body = reqj.dump();
