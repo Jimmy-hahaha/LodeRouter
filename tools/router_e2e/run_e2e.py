@@ -160,7 +160,7 @@ def main(argv=None) -> int:
         )
         config.flush()
         env = dict(os.environ)
-        env["MYAPP_CONFIG"] = config.name
+        env["LODEROUTER_CONFIG"] = config.name
         proc = subprocess.Popen(
             [str(binary)],
             cwd=str(REPO),

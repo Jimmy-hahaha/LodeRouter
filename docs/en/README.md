@@ -168,7 +168,7 @@ Patches are kept in priority order `[任务] > [报错] > [约束] > [失败] > 
 
 | Item | Details |
 | --- | --- |
-| Config lookup order | `MYAPP_CONFIG` → user config directory → the executable's directory → the current working directory (the in-repo `config/config.json` is a template) |
+| Config lookup order | `LODEROUTER_CONFIG` → user config directory → the executable's directory → the current working directory (the in-repo `config/config.json` is a template) |
 | Logging | Writes `router.log` in the current directory and prints to the terminal; `LODE_LOG_CONSOLE=0` writes the file only |
 | Startup probe | Every class's backend is probed by url and logged as `闲聊(easy)/数学(middle)/代码(hard) backend is found: <url> -> <model>` |
 | Missing config | A level missing `url` / `model` is only logged; a request actually landing on it returns `502` |

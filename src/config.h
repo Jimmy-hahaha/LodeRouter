@@ -101,7 +101,7 @@ inline fs::path getUserCacheDir(const std::string& appName) {
 // ───────── 配置定位：按环境变量 → 用户配置目录 → 可执行文件旁 → 当前目录查找 ─────────
 inline fs::path locateConfigFile(const std::string& appName,
                                  const std::string& fileName = "config.json") {
-    if (const char* env = std::getenv("MYAPP_CONFIG")) {
+    if (const char* env = std::getenv("LODEROUTER_CONFIG")) {
         if (*env) return fs::path(env);
     }
 

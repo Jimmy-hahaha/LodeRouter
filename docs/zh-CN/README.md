@@ -168,7 +168,7 @@ edgejev build --backend laya --model <HF id 或本地路径> --out ./my-laya-onn
 
 | 项目 | 说明 |
 | --- | --- |
-| 配置查找顺序 | `MYAPP_CONFIG` → 用户配置目录 → 可执行文件所在目录 → 当前工作目录（仓库内 `config/config.json` 是模板） |
+| 配置查找顺序 | `LODEROUTER_CONFIG` → 用户配置目录 → 可执行文件所在目录 → 当前工作目录（仓库内 `config/config.json` 是模板） |
 | 日志 | 写当前目录的 `router.log` 并打印到终端；`LODE_LOG_CONSOLE=0` 只写文件 |
 | 启动探测 | 按 url 逐档探测后端，打印 `闲聊(easy)/数学(middle)/代码(hard) backend is found: <url> -> <model>` |
 | 缺配置 | 某档缺 `url` / `model` 只打日志，请求真落到该档才返回 `502` |
